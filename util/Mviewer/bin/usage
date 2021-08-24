@@ -1,0 +1,55 @@
+
+Mviewer: a component of the Msuite package for visualization of DNA methylation data
+Version 1.0.0, Apr 2020
+Written by Kun Sun (sunkun@szbl.ac.cn)
+
+=================================================================================
+
+Usage: Mviewer [options] -f align.bam -r query.bed -g genome
+
+Parameters:
+
+Compulsory:
+
+  -f  align.bam     Specify the path to the Msuite result (bam format)
+
+                    Please confirm that the BAM file has been sorted and
+                    the index file (.bam.bai) also exists.
+                    Note that Msuite always generate both files.
+
+  -r  query.region  Specify the query region in chrX:XXX,XXX,XXX-XXX,XXX,XXX format
+
+  -g  genome.fa     Specify the reference genome sequence file.
+                    Note that it is OK if you only provide the fasta of the chromosome
+                    same as your query region.
+
+Optional:
+
+  -p  protocol      Specify the protocol that generate the data
+                    Default: BS, accepts 'BS' and 'TAPS'
+
+  -o  output.dir    Specify the output directory [recommended]
+                    Default: create and use a new sub-directory called 'Mvis'
+
+  -d  level         Build a dense view with the given level
+                    Supports 0 (no dense view), 1 (light dense) and 2 (heavy dense)
+                    Default: 0
+
+  -e                Set this flag will force the program to show exact regions as
+                    specified in the query.bed (i.e., cut the basepairs outside)
+                    Default: Unset
+
+  -s                Set this flag to sort the reads by genotyping information
+                    on SNP sites (if any; automatically detected)
+                    Default: Unset; reads are sort by genomic coordination
+
+  -w                Visualize reads mapped to watson strand only
+  -c                Visualize reads mapped to crick strand only
+
+  -h                Show this help massage and exit
+
+=================================================================================
+
+For more information, please refer to README file in the source package.
+Mviewer: a component of the Msuite for visualization of DNA methylation data
+

@@ -1,0 +1,131 @@
+
+Mviewer is a component of Msuite for visualization of DNA methylation data
+Version 1.0.0, Apr 2020
+Authors: Kun Sun, Yu Zhao, Huating Wang and Hao Sun
+Software implemented by Kun Sun (sunkun@szbl.ac.cn)
+
+Distributed under the GNU General Public License v3.0 (GPLv3) for personal and academic usage only.
+For more information please read the license files under "license" directory.
+------------------------------------------------------------------------------
+
+This README file covers the following topics:
+
+1. Installation
+2. How to run Mviewer
+3. Output explanation
+
+
+1. Installation
+
+Mviewer is written in Perl and Bash for Linux/Unix platform. To run Mviewer you need a Linux/Unix
+machine with Bash 3 (or higher) and Perl 5.10 (or higher) installed.
+
+After uncompressing this source package, the installation is completed. No further installation is needed.
+
+NOTE: Mviewer depends on a program called "wkhtmltopdf" (http://wkhtmltopdf.org). The copy in this package
+is built for x86_64 platform. If you are using other platforms, please download one for your platform and
+replace the copy in the "bin/" directory.
+
+
+2. How to run Mviewer
+
+The main program is "Mviewer". You can add the path to Mviewer to your ".bashrc" file under the "PATH"
+variable to call it from anywhere, or you can run the following command to add it to your current session:
+
+   user@linux$ PATH=$PATH:$PWD
+
+
+Call "Mviewer" without any parameters to see the usage (or use '-h' option):
+
+
+Mviewer: a component of the Msuite package for visualization of DNA methylation data
+Version 1.0.0, Apr 2020
+Written by Kun Sun (sunkun@szbl.ac.cn)
+
+=================================================================================
+Usage: Mviewer [options] -f align.bam -r query.bed -g genome
+
+Parameters:
+
+Compulsory:
+
+  -f  align.bam     Specify the path to the Msuite alignment result (bam format)
+
+                    Please confirm that the BAM file has been sorted and
+                    the index file (.bam.bai) also exists.
+                    Note that Msuite always generate both files.
+
+  -r  query.region  Specify the query region in chrX:XXX,XXX,XXX-XXX,XXX,XXX format
+
+  -g  genome        Set the genome version
+
+                    Note: you must have the "GENOME.fa" and "GENOME.info" files under
+                    the "genome" directory where "GENOME" is your parameter.
+
+Optional:
+
+  -o  output.dir    Specify the output directory [recommended]
+                    Default: create and use a new sub-directory called 'Mvis'
+
+  -d  level         Build a dense view with the given level
+                    Supports 0 (no dense view), 1 (light dense) and 2 (heavy dense)
+                    Default: 0
+
+  -e                Set this flag will force the program to show exact regions as
+                    specified in the query.bed (i.e., cut the basepairs outside)
+                    Default: Unset
+
+  -s                Set this flag to sort the reads by genotyping information
+                    on SNP sites (if any; automatically detected)
+                    Default: Unset; reads are sort by genomic coordination
+
+  -h                Show this help massage and exit
+=================================================================================
+
+For more information, please refer to README file in the source package.
+Mviewer: a component of the Msuite for visualization of DNA methylation data
+
+
+
+IMPORTANT NOTES:
+1. By default, Mviewer will automatically extend the specified region to include the full size of all the
+   reads that overlap the original region. If you do not want this feature, then please set the "-e" flag and
+   Mviewer will force to visualize exactly the region provided through trimming the sequence outside the
+   specified region for each read.
+2. Mviewer supports dense view of the data which only keeps the CpG sites while ommits all the non-CpG
+   sequence. 2 levels of dense are provided. However, the dense view will be recorded in a separate file and
+   the original visualization outputs will NOT be overwritten.
+
+
+For example, if your file is "/path/to/Maligner.bam" and your reference sequence is "/path/to/hg18fa", you want
+to visualize a region chr7:129919950-129920150 (promoter of MEST gene) and want to write the results into
+"/path/to/result/" with default parameters, simply run:
+
+   user@linux$ Mviewer -f /path/to/Maligner.bam -r chr7:129919950-129920150 \
+							-g /path/to/hg18.chr7.fa -o /path/to/result/
+
+
+3. Outputs explanation
+
+Mviewer outputs all the results for the given region in the directory specified by "-o OUTDIR" option (if not
+specified, Mviewer will use the defaultvalue 'Mvis'). The final outputs are "OUTDIR/vis.sorted" (plain text),
+"OUTDIR/vis.html", and "OUTDIR/vis.pdf". If "-d" is set, the densed view result will be produced and stored in
+"OUTDIR/vis.dense" (plain text). The plain text files are suitable for view in the terminal. The ".html" file
+could be opened in a web browser like firefox (https://www.mozilla.org/) and ".pdf" could be opened in a PDF
+reader like Foxit Reader (https://www.foxitsoftware.com/products/pdf-reader/).
+
+The code scheme in the output HTML/PDF file is as follows:
+-:         same neucleotide as the reference
+D:         Deletions in the sequence (Note that insertions are all discarded)
+A/C/G/T:   the neucleotide (which is different than the reference) in the sequencing read
+grey box:  unmethylated cytosine
+black box: methylated cytosine
+grey dot:  gap in paired-end sequencing data
+
+
+------------------------------------------------------------------------------
+Please send bug reports to Kun Sun (sunkun@szbl.ac.cn).
+
+Msuite package is freely available at:
+https://github.com/hellosunking/Msuite/
+

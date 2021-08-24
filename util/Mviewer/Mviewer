@@ -1,0 +1,184 @@
+#!/bin/bash
+#
+# Author: Kun Sun @ SZBL (sunkun@szbl.ac.cn)
+# Date  : Apr 2020
+
+set -o nounset
+set -o errexit
+
+REALDIR=`readlink -f $0`
+ROOT=`dirname $0`
+PRG=$ROOT/bin
+
+function usage()
+{
+	cat $PRG/usage
+	exit 2
+}
+
+if [ $# == 0 ]
+then
+	usage
+fi
+
+# default parameters
+SAMFILE=""
+REGION=""
+OUTDIR="Mvis"
+TRIMEXACT="no"
+SORTSNP="no"
+#MODE="SE"
+PROTOCOL="BS"
+GENOME=""
+DENSE=0
+WATSON=1
+CRICK=1
+
+# read command line parameters
+while getopts "f:m:p:r:o:g:d:eswch" OPTION
+do
+	case $OPTION in
+		f)SAMFILE="$OPTARG"
+		;;
+#		m)MODE="$OPTARG"
+#		;;
+		p)PROTOCOL="$OPTARG"
+		;;
+		r)REGION="$OPTARG"
+		;;
+		o)OUTDIR="$OPTARG"
+		;;
+		g)GENOME="$OPTARG"
+		;;
+		d)DENSE="$OPTARG"
+		;;
+		e)TRIMEXACT="yes"
+		;;
+		s)SORTSNP="yes"
+		;;
+		w)CRICK=0
+		;;
+		c)WATSON=0
+		;;
+		h)usage
+		;;
+		?)echo -e "\n\n\e[31m***** ERROR: unsupported option detected. *****\e[0m\n" && usage
+		;;
+	esac
+done
+
+## check parameters
+if [ ! -s "$SAMFILE" ]
+then
+	echo -e "\n\e[31m***** FATAL ERROR: no alignment file specified or file does not exist! *****\e[0m" > /dev/stderr
+	usage
+fi
+## check index file
+if [ ! -s "$SAMFILE.bai" ]
+then
+	echo -e "\n\e[31m***** FATAL ERROR: BAM index file not found! *****\e[0m" > /dev/stderr
+	usage
+fi
+
+if [ "$REGION" == "" ]
+then
+	echo -e "\n\e[31m***** FATAL ERROR: genomic region is not specified! *****\e[0m" > /dev/stderr
+	usage
+else	## check REGION format, acceptable: chrX:XXX,XXX,XXX-XXX,XXX,XXX
+	REGIONFORMAT=`echo $REGION | perl -ne 'if( /^chr\S+:\d[\d,]+-[\d,]+\d$/){print 0;} else {print 1;}'`
+	if [ $REGIONFORMAT == 1 ]
+	then
+		echo -e "\n\e[31m***** FATAL ERROR: unsupported region format! ***** \e[0m" > /dev/stderr
+		usage
+	fi
+fi
+## format for region
+
+if [ -z "$GENOME" ]
+then
+	echo -e "\n\e[31m***** FATAL ERROR: reference genome file is not specified! *****\e[0m" > /dev/stderr
+	usage
+elif [ ! -s $GENOME ]
+then
+	echo -e "\n\e[31m***** FATAL ERROR: reference genome file not found! *****\e[0m" > /dev/stderr
+	usage
+fi
+
+if [ -d $OUTDIR ]
+then
+	echo -e "\n\e[36m*** Warning: Output directory $OUTDIR EXISTS! ***\e[0m"
+else
+	mkdir -p $OUTDIR
+fi
+
+## check samtools
+samtools=`which samtools 2>/dev/null`
+if [ $samtools == "" ]
+then
+	echo -e "\n\e[31m***** FATAL ERROR: samtools not found! *****\e[0m" > /dev/stderr
+	exit 10
+else
+	echo -e "\n\e[34m***** Info: samtools found at '$samtools' *****\e[0m\n" > /dev/stderr
+fi
+
+## extract chr, start end from REGION and reformat REGION
+chr=` echo $REGION | perl -ne 's/,//g; print $1 if /^(chr\S+):\d+-\d+$/'`
+spos=`echo $REGION | perl -ne 's/,//g; print $1 if /^chr\S+:(\d+)-\d+$/'`
+epos=`echo $REGION | perl -ne 's/,//g; print $1 if /^chr\S+:\d+-(\d+)$/'`
+
+let regionsize=$epos-$spos
+if [ $regionsize -gt 10000 ]
+then
+	if [ $regionsize -gt 100000 ]
+	then
+		echo -e "\n\e[31m***** ERROR: region too large! Please break it down to several short ones. *****\e[0m" > /dev/stderr
+	else
+		echo -e "\n\e[33m***** WARNING: large region! Please consider break it down to several short ones. *****\e[0m" > /dev/stderr
+	fi
+fi
+REGION="$chr:$spos-$epos"
+
+## check strand
+if [ $WATSON == 0 ] && [ $CRICK == 0 ]
+then
+	echo -e "\n\e[31m***** FATAL ERROR: Both '-w' and '-c' are specified, no reads to visualize! *****\e[0m" > /dev/stderr
+	exit 11
+fi
+
+## visualization
+#step 1: grab and reformat data
+echo "Extracting alignment data ..."
+$samtools view $SAMFILE $REGION >$OUTDIR/target.sam
+perl $PRG/process.sam.pl $OUTDIR/target.sam $WATSON $CRICK >$OUTDIR/target.dat
+
+#step 2: text visualization
+echo "Visualizing data ..."
+perl $PRG/visualization.pl $GENOME $REGION $OUTDIR/target.dat $PROTOCOL >$OUTDIR/vis.raw
+
+#step 3: dense, trim and html/pdf visualization
+if [ $TRIMEXACT == "yes" ]
+then
+	echo "Trimming visualization result ..."
+	perl $PRG/trim.vis.pl $OUTDIR/vis.raw $chr:$spos-$epos >$OUTDIR/vis.trim
+else
+	ln -sf vis.raw $OUTDIR/vis.trim
+fi
+
+if [ $SORTSNP == "yes" ]
+then
+	echo "Sorting visualization result ..."
+	perl $PRG/sort.snp.pl $OUTDIR/vis.trim >$OUTDIR/vis.sorted
+else
+	ln -sf vis.trim $OUTDIR/vis.sorted
+fi
+
+if [ $DENSE -gt 0 ]
+then
+	echo "Building dense view ..."
+	perl $PRG/dense.pl $OUTDIR/vis.sorted $DENSE >$OUTDIR/vis.dense
+fi
+
+echo "Outputing HTML and PDF files ..."
+perl $PRG/vis2html.pl $OUTDIR/vis.sorted $OUTDIR/vis
+sh $OUTDIR/vis.html2pdf.sh 2>/dev/null
+
