@@ -172,7 +172,7 @@ the hg19 reference genome in 4-letter mode, and you want to use 16 threads to sp
 can run:
 ```
 user@linux$ msuite2 -1 /path/to/read1.fq -2 /path/to/read2.fq -x hg19 \
-                   -4 -m TAPS -p 16 -o /path/to/output/dir
+                    -4 -m TAPS -p 16 -o /path/to/output/dir
 ```
 
 ### Example 2
@@ -182,7 +182,7 @@ the mm10 reference genome (note that you MUST use 3-letter mode here), and use 3
 	then you can run:
 ```
 user@linux$ msuite2 -1 /path/to/read1.fq.gz -x mm10 -c 75 \
-                   -3 -m BS -p 32 -o /path/to/output/dir
+                    -3 -m BS -p 32 -o /path/to/output/dir
 ```
 
 ### Example 3
@@ -193,19 +193,18 @@ issues by DNA overhang, and you want to use 48 threads to speed-up the analysis,
 user@linux$ msuite2 -1 /path/to/lane1.read1.fq.gz,/path/to/lane2.read1.fq.gz,/path/to/lane3.read1.fq.gz \
                    -2 /path/to/lane1.read2.fq.gz,/path/to/lane2.read2.fq.gz,/path/to/lane3.read2.fq.gz \
                    --cut-r1-head 5 --cut-r1-tail 10 --cut-r2-head 5 --cut-r2-tail 10 \
-				   -x hg19 -p 48 -o /path/to/output/dir
+                   -x hg19 -p 48 -o /path/to/output/dir
 ```
 
 If you want to use add all the '.fq' files in your path, you can use the `*` syntax:
 ```
 user@linux$ msuite2 -1 '/path/to/lane*.read1.fq.gz' \
-                   -2 '/path/to/lane*.read2.fq.gz' \
-				   --cut-r1-head 5 --cut-r1-tail 10 --cut-r2-head 5 --cut-r2-tail 10 \
-                   -x hg19 -p 48 -o /path/to/output/dir
+                    -2 '/path/to/lane*.read2.fq.gz' \
+                    --cut-r1-head 5 --cut-r1-tail 10 --cut-r2-head 5 --cut-r2-tail 10 \
+                    -x hg19 -p 48 -o /path/to/output/dir
 ```
 Note that the single quotation mark is essential to protect the '\*' syntax from been extracted by your shell.
 
-<br />
 `Msuite2` will check the data and dependent programs then generate a `makefile` under `/path/to/output/dir`
 ('-o' option). Then you can go to `/path/to/output/dir` and run `make` to perform the analysis:
 ```
