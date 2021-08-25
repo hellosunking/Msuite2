@@ -1,6 +1,5 @@
 
 # Msuite2: Multi-mode DNA methylation data analysis suite
-Msuite2 is the successor of Msuite.<br />
 Version 2.0.0, Aug 2021<br />
 Authors: Lishi Li, Yunyun An, Pengxiang Yuan, Li Ma, Xin Jin, Xin Hong, Kun Sun<br />
 Software implemented by Kun Sun \(sunkun@szbl.ac.cn\)<br />
@@ -11,6 +10,18 @@ for personal and academic usage only.<br />
 For detailed information please read the license file under `license` directory.
 
 ---
+## Improvements in Msuite2
+Msuite2 is the successor of [Msuite1](https://github.com/hellosunking/Msuite/ "Msuite"), and keeps the
+key features of Msuite1, e.g., integration of quality control, read alignment, methylation call, and data
+visualization, as well as supports both 3- and 4-letter alignment modes.<br />
+
+The major improvements/changes of Msuite2 are:
+
+* Only aligns the reads to reference genome once
+* Runs ~ 1.5x faster than Msuite1 in alignment, ~ 9x faster in methylation call
+* Supports further cutting of reads after adapter-trimming to minimize
+  [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
+* Optimzed statistics report
 
 ## Installation
 `Msuite2` is written in `Perl` and `R` for Linux/Unix platform. To run `Msuite2` you need a Linux/Unix
@@ -56,10 +67,10 @@ genomes to `Msuite2` as you need.
 The main program is `msuite2`. You can add its path to your `.bashrc` file under the `PATH` variable
 to call it from anywhere, or you can run the following command to add it to your current session:
 ```
-user@linux$ PATH=$PATH:$PWD
+user@linux$ export PATH=$PATH:$PWD
 ```
 
-Call `Msuite2` without any parameters to see the usage (or use '-h' option):
+Call `msuite2` without any parameters to see the usage (or use '-h' option):
 ```
 ########## Msuite2: Multi-mode DNA methylation data analysis suite ##########
 
@@ -160,7 +171,7 @@ Your data is generated using TAPS protocol in 75 bp * 2 (paired-end) mode, and y
 the hg19 reference genome in 4-letter mode, and you want to use 16 threads to speed-up the analysis, then you
 can run:
 ```
-user@linux$ Msuite2 -1 /path/to/read1.fq -2 /path/to/read2.fq -x hg19 \
+user@linux$ msuite2 -1 /path/to/read1.fq -2 /path/to/read2.fq -x hg19 \
                    -4 -m TAPS -p 16 -o /path/to/output/dir
 ```
 
@@ -170,7 +181,7 @@ first 75 bp of your reads (e.g., due to sequencing quality considerations), and 
 the mm10 reference genome (note that you MUST use 3-letter mode here), and use 32 threads to speed-up the analysis,
 	then you can run:
 ```
-user@linux$ Msuite2 -1 /path/to/read1.fq.gz -x mm10 -c 75 \
+user@linux$ msuite2 -1 /path/to/read1.fq.gz -x mm10 -c 75 \
                    -3 -m BS -p 32 -o /path/to/output/dir
 ```
 
@@ -179,7 +190,7 @@ If your data is generated using BS protocol in paired-end mode, and you have 3 l
 your data to the hg19 reference genome, you want to skip the head/tail 5/10 cycles in both reads to suppress the
 issues by DNA overhang, and you want to use 48 threads to speed-up the analysis, then you can run:
 ```
-user@linux$ Msuite2 -1 /path/to/lane1.read1.fq.gz,/path/to/lane2.read1.fq.gz,/path/to/lane3.read1.fq.gz \
+user@linux$ msuite2 -1 /path/to/lane1.read1.fq.gz,/path/to/lane2.read1.fq.gz,/path/to/lane3.read1.fq.gz \
                    -2 /path/to/lane1.read2.fq.gz,/path/to/lane2.read2.fq.gz,/path/to/lane3.read2.fq.gz \
                    --cut-r1-head 5 --cut-r1-tail 10 --cut-r2-head 5 --cut-r2-tail 10 \
 				   -x hg19 -p 48 -o /path/to/output/dir
@@ -187,7 +198,7 @@ user@linux$ Msuite2 -1 /path/to/lane1.read1.fq.gz,/path/to/lane2.read1.fq.gz,/pa
 
 If you want to use add all the '.fq' files in your path, you can use the `*` syntax:
 ```
-user@linux$ Msuite2 -1 '/path/to/lane*.read1.fq.gz' \
+user@linux$ msuite2 -1 '/path/to/lane*.read1.fq.gz' \
                    -2 '/path/to/lane*.read2.fq.gz' \
 				   --cut-r1-head 5 --cut-r1-tail 10 --cut-r2-head 5 --cut-r2-tail 10 \
                    -x hg19 -p 48 -o /path/to/output/dir
