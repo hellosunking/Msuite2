@@ -1,5 +1,5 @@
 
-# Msuite2: Multi-mode DNA methylation data analysis suite
+# Msuite2: Multi-mode DNA methylation data analysis suite with enhanced performance
 Version 2.0.0, Aug 2021<br />
 Authors: Lishi Li, Yunyun An, Pengxiang Yuan, Li Ma, Xin Jin, Xin Hong, Kun Sun<br />
 Software implemented by Kun Sun \(sunkun@szbl.ac.cn\)<br />
