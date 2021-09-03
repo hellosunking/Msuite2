@@ -18,10 +18,10 @@ visualization, as well as supports both 3- and 4-letter alignment modes.<br />
 The major improvements/changes of Msuite2 are:
 
 * Only aligns the reads to reference genome once
-* Runs ~ 1.5x faster than Msuite1 in alignment, ~ 9x faster in methylation call
+* Runs ~ 1.5x faster than Msuite1 in alignment, ~ 8x faster in methylation call
 * Supports further cutting of reads after adapter-trimming to minimize
   [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
-* Optimzed statistics report
+* Optimized report on data/analysis statistics
 
 ## Installation
 `Msuite2` is written in `Perl` and `R` for Linux/Unix platform. To run `Msuite2` you need a Linux/Unix
