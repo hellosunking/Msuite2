@@ -132,7 +132,7 @@ int main( int argc, char *argv[] ) {
 		ss2.clear();
 		ss2 >> name2 >> flag >> chr >> pos2;
 
-		if( pos1 >= pos2 ) {	// problematic reads, discard
+		if( pos1 > pos2 ) {	// problematic reads, discard
 			++ discard;
 			continue;
 		}
