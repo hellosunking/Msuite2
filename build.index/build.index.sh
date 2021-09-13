@@ -2,14 +2,13 @@
 #
 # Author: Kun Sun @ SZBL (hellosunking@foxmail.com)
 #
-
 set -o nounset
 set -o errexit
 #command || { echo "command failed"; exit 1; }
 
 if [ $# -lt 3 ]
 then
-	echo -e "\nUsage: $0 <genome folder|fa> <refSeq.txt> <index.identifier> [thread=auto]\n" >/dev/stderr
+	echo -e "\nUsage: $0 <genome folder|fa> <refSeq.txt|gene_anno.gff> <index.identifier> [thread=auto]\n" >/dev/stderr
 	echo -e "This is a utility program of Msuite, designed to build genome references." >/dev/stderr
 	echo -e "Please refer to README file for more information.\n" >/dev/stderr
 	exit 2
@@ -64,8 +63,15 @@ echo "Building 3-letter indices ..."
 $bb --threads $thread --large-index \
 	$indexDIR/$id/C2T.fa   $indexDIR/$id/indices/m3 >/dev/null
 
-echo "Processing refSeq gene annotation ..."
-perl $PRG/process.refGene.pl $2 >$indexDIR/$id/tss.ext.bed
+echo "Processing gene annotation ..."
+if [[ $2 =~ gff ]]
+then
+	echo "Info: processing file in GFF format ..."
+	perl $PRG/process.gff.pl $2 >$indexDIR/$id/tss.ext.bed
+else
+	echo "Info: processing file in UCSC's refGene format ..."
+	perl $PRG/process.refGene.pl $2 >$indexDIR/$id/tss.ext.bed
+fi
 
 rm -f $indexDIR/$id/CG2TG.fa $indexDIR/$id/C2T.fa
 echo
