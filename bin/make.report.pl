@@ -38,8 +38,12 @@ while( <CONF> ){
 	next unless /\S/;
 	my @l = split /\t/;
 	$conf{ $l[0] } = $l[1];
-	$l[1] =~ s/:/<br \/>/;	## process R1:R2 files
-	$parameter .= "<tr bgcolor=\"$color[$i]\"><td>$l[0]</td><td>$l[1]</td></tr>\n";
+	if( $l[1] =~ /:/ ) {	## process R1:R2 files
+		my ($r1, $r2) = split /:/, $l[1];
+		$parameter .= "<tr bgcolor=\"$color[$i]\"><td>$l[0]</td><td>Read 1: $r1<br />Read 2: $r2</td></tr>\n";
+	} else {
+		$parameter .= "<tr bgcolor=\"$color[$i]\"><td>$l[0]</td><td>$l[1]</td></tr>\n";
+	}
 	$i = 1 - $i;
 }
 close CONF;
@@ -58,7 +62,7 @@ td {
 text-align: left;
 padding-left: 10px;
 }
-#fqstat td {
+.twoFrame td {
 text-align: center;
 font-weight:bold;
 }
@@ -85,28 +89,35 @@ close LOG;
 
 ## load aligner log
 open LOG, "$dir/Msuite2.rmdup.log" or die( "$!" );
-my ($waligned, $wdiscard, $wduplicate) = (0, 0, 0);
-my ($caligned, $cdiscard, $cduplicate) = (0, 0, 0);
+my ($waligned, $wdiscard, $wdup) = (0, 0, 0);
+my ($caligned, $cdiscard, $cdup) = (0, 0, 0);
 my $cntL = 0;
 while( <LOG> ) {
 	my @l = split /\t/;	## chr total discard dup
+
+#	$cntL += $l[1]-$l[2]-$l[3] if $l[0]=~/^[cr]hrL/;
+	if( $l[0]=~/^[cr]hrL/ ) {
+		$cntL += $l[1];
+		next;
+	}
+	## report the original read number due to higher dup rate in lambda
+
 	if( $l[0] =~ /^chr/ ) {
 		$waligned   += $l[1];
 		$wdiscard   += $l[2];
-		$wduplicate += $l[3];
+		$wdup += $l[3];
 	} else {	# rhrXXX
 		$caligned   += $l[1];
 		$cdiscard   += $l[2];
-		$cduplicate += $l[3];
+		$cdup += $l[3];
 	}
-
-	$cntL += $l[1] if $l[0]=~/^[cr]hrL/;
 }
 close LOG;
 my $aligned = $waligned + $caligned;
 my $discard = $wdiscard + $cdiscard;
-my $duplicate = $wduplicate + $cduplicate;
+my $duplicate = $wdup + $cdup;
 my $reported  = $aligned - $discard - $duplicate;
+#my $ratioL  = sprintf("%.2f %%", $cntL/($cntL+$aligned) * 100);
 
 print "<table id=\"alignStat\" width=\"75%\">\n",
 		"<tr bgcolor=\"$color[0]\"><td width=\"70%\"><b>Total input reads</b></td>",
@@ -115,7 +126,11 @@ print "<table id=\"alignStat\" width=\"75%\">\n",
 		"<td><b>", digitalize($trim), sprintf(" (%.2f %%)", $trim/$total*100), "</b></td></tr>\n";
 
 print "<tr bgcolor=\"$color[0]\"><td><b>Total aligned reads</b></td>",
-		"<td><b>", digitalize($aligned), sprintf(" (%.2f %%)", $aligned/$trim*100), "</b></td></tr>\n",
+		"<td><b>", digitalize($aligned+$cntL), sprintf(" (%.2f %%)", ($aligned+$cntL)/$trim*100), "</b></td></tr>\n",
+		"<tr bgcolor=\"$color[0]\"><td>&nbsp;&nbsp;Lambda reads</td>",
+		"<td>&nbsp;&nbsp;", digitalize($cntL), sprintf(" (%.2f %%)", $cntL/($cntL+$aligned)*100), "</td></tr>\n",
+		"<tr bgcolor=\"$color[0]\"><td><b>Non-lambda reads</b></td>",
+		"<td><b>", digitalize($aligned), sprintf(" (%.2f %%)", $aligned/($cntL+$aligned)*100), "</b></td></tr>\n",
 		"<tr bgcolor=\"$color[1]\"><td>&nbsp;&nbsp;Forward chain</td>",
 		"<td>&nbsp;&nbsp;", digitalize($waligned), sprintf(" (%.2f %%)", $waligned/$trim*100), "</td></tr>\n",
 		"<tr bgcolor=\"$color[0]\"><td>&nbsp;&nbsp;Reverse chain</td>",
@@ -167,9 +182,9 @@ print "<table id=\"methStat\" width=\"75%\">\n",
 			"<td width=\"30%\"><b>$tm %</b></td></tr>\n",
 		"<tr bgcolor=\"$color[1]\"><td>&nbsp;&nbsp;Forward chain</td><td>&nbsp;&nbsp;$wm %</td></tr>\n",
 		"<tr bgcolor=\"$color[0]\"><td>&nbsp;&nbsp;Reverse chain</td><td>&nbsp;&nbsp;$cm %</td></tr>\n",
-		"<tr bgcolor=\"$color[1]\"><td><b>Reads mapped to Lambda genome</b></td>",
-			"<td><b>", digitalize($cntL), "</b></td></tr>\n",
-		"<tr bgcolor=\"$color[0]\"><td><b>C-&gt;T conversion rate for lambda genome</b></td>",
+#		"<tr bgcolor=\"$color[1]\"><td><b>Reads mapped to Lambda genome</b></td>",
+#			"<td><b>", digitalize($cntL), " ($ratioL %)</b></td></tr>\n",
+		"<tr bgcolor=\"$color[0]\"><td><b>C-&gt;T conversion rate (lambda reads)</b></td>",
 			"<td><b>$conversionL</b></td></tr>\n";
 
 if( $CpH ) {
@@ -207,7 +222,7 @@ print "</table>\n\n";
 }
 ###################################################
 print '<h2>Base composition in the sequenced reads</h2>
-<table id="fqstat">
+<table class="twoFrame">
 	<tr><td>Read 1 raw sequence</td><td>Read 1 trimmed</td></tr>
 	<tr>
 		<td><img src="R1.fqstat.png" alt="Base composition in read 1 raw"></td>
@@ -226,32 +241,49 @@ if( $pe ) {
 print "</table>\n\n";
 
 if( $pe ) {
-	print 
-'<h2>Fragment size distribution</h2>
-	<img src="Msuite2.size.png" alt="fragment size distribution"><br />
-';
+	if( -s "$dir/Msuite2.report/Msuite2.lambda.size.png" ) {
+		print '<h2>Fragment size distribution</h2>
+<table class="twoFrame">
+	<tr><td>Autosomal reads</td><td>Lambda reads</td></tr>
+	<tr>
+		<td><img src="Msuite2.size.png" alt="size of autosomal reads"></td>
+		<td><img src="Msuite2.lambda.size.png" alt="size of lambda reads"></td>
+	</tr>
+</table>';
+	} else {
+		print '<h2>Fragment size distribution</h2>
+	<img src="Msuite2.size.png" alt="fragment size distribution"><br />';
+	}
+	print "\n\n";
 }
 
 unless( $alignonly ) {
 	print
 '<h2>Methylation level per chromosome</h2>
 	<img src="DNAm.per.chr.png" alt="DNAm.per.chr"><br />
-
-<h2>Methylation level around TSS</h2>
-	<img src="DNAm.around.TSS.png" alt="Methylation level around TSS"><br />
-
-<h2>M-bias plot</h2>
-<ul>
-	<li>Read 1</li><br />
-	<img src="R1.mbias.png" alt="M-bias in read 1"><br />
 ';
-	if( $pe ) {
-		print
-'	<li>Read 2</li><br />
-	<img src="R2.mbias.png" alt="M-bias in read 2"><br />
+
+if( -s "$dir/Msuite2.report/DNAm.around.TSS.png" ) {
+print '<h2>Methylation level around TSS</h2>
+	<img src="DNAm.around.TSS.png" alt="Methylation level around TSS"><br />
+';}
+
+print '<h2>M-bias plot</h2>
+';
+if( $pe ) {
+	print '<table class="twoFrame">
+	<tr><td>Read 1</td><td>Read 2</td></tr>
+	<tr><td><img src="R1.mbias.png" alt="M-bias in read 1"></td>
+	<td><img src="R2.mbias.png" alt="M-bias in read 2"></td></tr>
+</table>
+';
+} else {
+	print
+'Read 1<br />
+<img src="R1.mbias.png" alt="M-bias in read 1"><br />
 ';
 	}
-	print "</ul>\n\n";	
+	print "</ul>\n\n";
 }
 
 print "<h2>Analysis Parameters</h2>\n",

@@ -115,7 +115,7 @@ int main( int argc, char *argv[] ) {
 			// process bowtie2 tags
 			// remaining tags by bowtie2: I will keep AS and NM tags
 			ss1 >> seq1 >> qual1;
-			addTag1 = "\tXG:Z:CT";	// to be compatible to Msuite1
+			addTag1.clear();
 			bool AStag = false;
 			bool NMtag = false;
 			while( ss1.rdbuf()->in_avail() ) {
@@ -132,11 +132,11 @@ int main( int argc, char *argv[] ) {
 					if( AStag )break;
 				}
 			}
-			addTag1 += '\n';
+			addTag1 += "\tXG:Z:CT\n";	// to be compatible with Msuite1
 
 			// Read 2
 			ss2 >> score_str >> cigar2 >> mateflag >> matepos >> tmp >> seq2 >> qual2;
-			addTag2 = "\tXG:Z:CT";	// to be compatible to Msuite1
+			addTag2.clear();
 			AStag = false;
 			NMtag = false;
 			while( ss2.rdbuf()->in_avail() ) {
@@ -153,7 +153,7 @@ int main( int argc, char *argv[] ) {
 					if( AStag )break;
 				}
 			}
-			addTag2 += '\n';
+			addTag2 += "\tXG:Z:CT\n";
 
 			// write output
 			fout << name1 << "\t99\t" << chr << '\t' << pos1 << '\t' << score_str << '\t' << cigar1
@@ -183,9 +183,4 @@ int main( int argc, char *argv[] ) {
 	
 	return 0;
 }
-
-
-
-
-
 

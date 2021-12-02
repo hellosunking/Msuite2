@@ -26,7 +26,7 @@ if( args[3] == "BS" || args[3] == "bs" ) {
 }
 
 out = paste0( args[4], '.pdf' );
-pdf( out, width=8, height=4 );
+pdf( out, width=6, height=4 );
 par( mar=c(5,5,1,1) );
 plot(  w ~ wbias$Cycle, type='o', pch=1, col="red", ylim=c(0, 100),
 		xlab="Sequencing cycles (bp)", ylab="Methylation level (%)", cex.lab=1.5 );
@@ -35,7 +35,7 @@ legend( 'top', c('Watson', 'Crick'), col=c("red", "blue"), pch=c(1, 8), horiz=T,
 dev.off();
 
 out = paste0( args[4], '.png' );
-png( out, width=1080, height=540 );
+png( out, width=600, height=400 );
 par( mar=c(5,5,1,1) );
 plot(  w ~ wbias$Cycle, type='o', pch=1, col="red", ylim=c(0, 100),
 		xlab="Sequencing cycles (bp)", ylab="Methylation level (%)", cex.lab=1.5 );

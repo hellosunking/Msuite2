@@ -168,7 +168,7 @@ int main( int argc, char *argv[] ) {
 			rev_q1.assign( qual1.crbegin(), qual1.crend() );
 
 			// remaining tags by bowtie2: I will keep AS and NM tags
-			addTag1 = "\tXG:Z:GA";	// to be compatible to Msuite1
+			addTag1.clear();
 			bool AStag = false;
 			bool NMtag = false;
 			while( ss1.rdbuf()->in_avail() ) {
@@ -186,7 +186,7 @@ int main( int argc, char *argv[] ) {
 				}
 			}
 			// if there is NO AS an NM tags, now remaining is NULL
-			addTag1 += '\n';
+			addTag1 += "\tXG:Z:GA\n";
 
 			// Read 2
 			ss2 >> score_str >> cigar2 >> mateflag >> matepos >> tmp >> seq2 >> qual2;
@@ -207,7 +207,7 @@ int main( int argc, char *argv[] ) {
 			}
 			rev_q2.assign( qual2.crbegin(), qual2.crend() );
 			// remaining tags by bowtie2: I will keep AS and NM tags
-			addTag2 = "\tXG:Z:GA";	// to be compatible to Msuite1
+			addTag2.clear();	// to be compatible to Msuite1
 			AStag = false;
 			NMtag = false;
 			while( ss2.rdbuf()->in_avail() ) {
@@ -225,7 +225,7 @@ int main( int argc, char *argv[] ) {
 				}
 			}
 			// if there is NO AS an NM tags, now remaining is NULL
-			addTag2 += '\n';
+			addTag2 += "\tXG:Z:GA\n";
 
 			// write output
 			chr[0] = 'c';	// I use rhr for reversed chromosomes, now change back to chr

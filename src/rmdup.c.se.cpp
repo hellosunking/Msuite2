@@ -133,7 +133,7 @@ int main( int argc, char *argv[] ) {
 			rev_q.assign( qual.crbegin(), qual.crend() );
 
 			// remaining tags by bowtie2: I will keep AS and NM tags
-			addTag = "\tXG:Z:GA";	// to be compatible to Msuite1
+			addTag.clear();	// to be compatible to Msuite1
 			bool AStag = false;
 			bool NMtag = false;
 			while( ss.rdbuf()->in_avail() ) {
@@ -151,7 +151,7 @@ int main( int argc, char *argv[] ) {
 				}
 			}
 			// if there is NO AS an NM tags, now remaining is NULL
-			addTag += '\n';
+			addTag += "\tXG:Z:GA\n";
 
 			// write output
 			chr[0] = 'c';	// I use rhr for reversed chromosomes, now change back to chr

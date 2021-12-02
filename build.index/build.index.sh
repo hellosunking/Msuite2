@@ -8,7 +8,7 @@ set -o errexit
 
 if [ $# -lt 3 ]
 then
-	echo -e "\nUsage: $0 <genome folder|fa> <refSeq.txt|gene_anno.gff> <index.identifier> [thread=auto]\n" >/dev/stderr
+	echo -e "\nUsage: $0 <genome folder|fa> <refSeq.txt|gene_anno.gff|null> <index.identifier> [thread=auto]\n" >/dev/stderr
 	echo -e "This is a utility program of Msuite, designed to build genome references." >/dev/stderr
 	echo -e "Please refer to README file for more information.\n" >/dev/stderr
 	exit 2
@@ -64,13 +64,18 @@ $bb --threads $thread --large-index \
 	$indexDIR/$id/C2T.fa   $indexDIR/$id/indices/m3 >/dev/null
 
 echo "Processing gene annotation ..."
-if [[ $2 =~ gff ]]
+if [ $2 == "null" ]
 then
-	echo "Info: processing file in GFF format ..."
-	perl $PRG/process.gff.pl $2 >$indexDIR/$id/tss.ext.bed
+	echo "WARNING: null is specified as gene annotation file, I will skip this step!"
 else
-	echo "Info: processing file in UCSC's refGene format ..."
-	perl $PRG/process.refGene.pl $2 >$indexDIR/$id/tss.ext.bed
+	if [[ $2 =~ gff ]]
+	then
+		echo "Info: processing file in GFF format ..."
+		perl $PRG/process.gff.pl $2 >$indexDIR/$id/tss.ext.bed
+	else
+		echo "Info: processing file in UCSC's refGene format ..."
+		perl $PRG/process.refGene.pl $2 >$indexDIR/$id/tss.ext.bed
+	fi
 fi
 
 rm -f $indexDIR/$id/CG2TG.fa $indexDIR/$id/C2T.fa

@@ -13,6 +13,8 @@ if( $#ARGV < 0 ) {
 
 my %bias;
 foreach my $file ( @ARGV ) {
+	next if $file =~ /[cr]hrL\./;	## ignore lambda reads
+
 	open MB, "$file" or die( "$!" );
 	while( <MB> ) {
 		next if /^#/;	#Locus	C	T	Z

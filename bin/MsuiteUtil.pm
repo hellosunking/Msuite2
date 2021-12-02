@@ -8,12 +8,12 @@ package MsuiteUtil;
 use strict;
 use warnings;
 use Exporter 'import';
-our @EXPORT = qw/$version $ver usage makefile_perchr makefile_methcall mk_samheader detect_cycle check_dependency check_index printRed printGrn printYlw/;
+our @EXPORT = qw/$version $ver usage makefile_perchr makefile_methcall mk_samheader detect_cycle check_dependency check_index printRed printGrn printYlw makefile_perchr_v2/;
 
 # long version
-our $version = 'v2.0.0 (Aug 2021)';
+our $version = 'v2.0.1 (Dec 2021)';
 # short version
-our $ver = 'v2.0.0';
+our $ver = 'v2.0.1';
 
 sub mk_samheader {
 	my $chrinfo   = shift;
@@ -29,8 +29,10 @@ sub mk_samheader {
 	open IN, "$chrinfo" or die( "$!" );
 	while( <IN> ) {
 		chomp;
-		my ($C, $size) = split /\t/;	## chr size
-		my $chr = "chr$C";
+		my ($chr, $size) = split /\t/;	## chr size
+		$chr = "chr$chr";# unless $chr=~/^NC/;
+		## do not add chr-prefix for NCBI-style chromosome?
+		## need to be compatible to the SAM records
 		print OUT "\@SQ\tSN:$chr\tLN:$size\n";
 	}
 	close IN;
@@ -327,6 +329,54 @@ sub check_index {
         printRed( "Fatal error: invalid index ($indexID)!\nPlease refer to README file for how to add indice to Msuite2." );
 		exit 11;
 	}
+	unless( -s "$Msuite2/$indexID/tss.ext.bed" ) {
+		printYlw( "WARNING: TSS annotation file for $indexID is missing/empty!" );
+		return 0;
+	}
+
+	return 1;
+}
+
+sub makefile_perchr_v2 {
+	my $MsuiteBin = shift;
+	my $samtools  = shift;
+	my $chrinfo   = shift;
+	my $samheader = shift;
+	my $seqMode   = shift;	## se or pe
+	my $makefile  = shift;
+	my $maxins    = shift || 1000;
+	my $THREAD    = shift || 1;
+
+	my $job = "";
+	my $mkf = "";
+
+	open IN, "$chrinfo" or die( "$!" );
+	while( <IN> ) {
+		chomp;
+		my ($C, $size) = split /\t/;	## chr size
+		my $chr = "chr$C";
+		$chr = "Lambda" if $C eq 'L';
+
+		$job .= " $chr.srt.bam";
+		$mkf .= "$chr.srt.bam: chr$C.sam rhr$C.sam\n";
+		$mkf .= "\t\@$MsuiteBin/rmdup.w.$seqMode $maxins chr$C.sam chr$C >chr$C.rmdup.log\n";
+		$mkf .= "\t\@$MsuiteBin/rmdup.c.$seqMode $size $maxins rhr$C.sam rhr$C >rhr$C.rmdup.log\n";
+		$mkf .= "\t\@cat $samheader chr$C.rmdup.sam rhr$C.c2w.sam | samtools view -bS - | samtools sort -o $chr.srt.bam -\n\n";
+	}
+	close IN;
+
+	open MK, ">$makefile" or die( "$!" );
+	print MK
+"../Msuite2.final.bam.bai: ../Msuite2.final.bam
+	$samtools index -\@ $THREAD ../Msuite2.final.bam
+	\@cat *rmdup.log > ../Msuite2.rmdup.log
+	$samtools index -\@ $THREAD Lambda.srt.bam
+	mv Lambda.srt.bam* ../
+
+../Msuite2.final.bam:$job
+	$samtools merge -\@ $THREAD ../Msuite2.final.bam chr*.srt.bam
+
+$mkf";
 }
 
 1;

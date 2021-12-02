@@ -1,13 +1,13 @@
 #!/usr/bin/perl
 #
 # Author : Kun Sun (sunkun@szbl.ac.cn)
-# Date   : Jul 2021
-# Version: 2.0.0
+# Date   : Dec 2021
+# Version: 2.0.1
 #
 # This is the main program of Msuite2.
 # It will interpret the parameters, prepare data and write makefile.
 #
-# Msuite2 is freely available at https://github.com/hellosunking/Msuite/
+# Msuite2 is freely available at https://github.com/hellosunking/Msuite2/
 #
 
 use strict;
@@ -17,7 +17,12 @@ use Cwd;
 use File::Basename;
 use FindBin;
 use lib "$FindBin::RealBin/bin";
-use MsuiteUtil qw/$version $ver usage check_index check_dependency detect_cycle makefile_perchr mk_samheader makefile_methcall printRed printGrn printYlw/;
+use MsuiteUtil qw/$version $ver usage check_index check_dependency detect_cycle makefile_perchr mk_samheader makefile_methcall printRed printGrn printYlw makefile_perchr_v2/;
+
+## v2.0.1
+## report lambda reads in a separated file
+## and revise the statistics table
+## move the XG:Z:CT/GA tag to the end of each record
 
 ## running environment
 my $Msuite2= $FindBin::RealBin;
@@ -95,7 +100,7 @@ if( check_parameters() ) {
 our ( $bowtie2, $bowtie2_ver, $samtools, $R ) = check_dependency();
 
 ## check whether the index is valid or not
-check_index( $Msuite2, $index );
+my $TSSanno = check_index( $Msuite2, $index );
 
 print "\nINFO: Use Msuite2 root directory '$Msuite2'.\n";
 
@@ -165,7 +170,7 @@ if( $pe ) {	## paired-end data
 
 # step 2: remove duplicate && crick->watson && sam->bam conversion
 mk_samheader( $chrinfo, $index, $protocol, $alignmode, $reads, "$outdir/per.chr/sam.header");
-makefile_perchr( $bin, $samtools, $chrinfo, "sam.header", $seqMode, "$outdir/per.chr/makefile.align", $maxins, $thread );
+makefile_perchr_v2( $bin, $samtools, $chrinfo, "sam.header", $seqMode, "$outdir/per.chr/makefile.align", $maxins, $thread );
 $makefile .= "Msuite2.final.bam.bai: Msuite2.split.OK #-@ $thread\n\t\@cd per.chr; make -j $thread -f makefile.align; cd ../\n\n";
 push @tasks, "Msuite2.final.bam.bai";
 
@@ -207,14 +212,16 @@ unless( $alignonly ) {
 	}
 
 	## step 4: plot DNAm around TSS
-	my $TSS = "$Msuite2/index/$index/tss.ext.bed";
-	$makefile .= "DNAm.around.TSS.stat: Msuite2.CpG.meth.call\n" .
-				 "\t$bin/profile.DNAm.around.TSS $chrinfo Msuite2.CpG.meth.call $TSS $protocol > DNAm.around.TSS.stat\n" .
-				 "DNAm.around.TSS.pdf: DNAm.around.TSS.stat\n" .
-				 "\t$R --slave --args DNAm.around.TSS.stat DNAm.around.TSS < $bin/plot.DNAm.around.tss.R\n\n";
-	push @tasks, "DNAm.around.TSS.pdf";
+	if( $TSSanno ) {
+		my $TSS = "$Msuite2/index/$index/tss.ext.bed";
+		$makefile .= "DNAm.around.TSS.stat: Msuite2.CpG.meth.call\n" .
+					 "\t$bin/profile.DNAm.around.TSS $chrinfo Msuite2.CpG.meth.call $TSS $protocol > DNAm.around.TSS.stat\n" .
+					 "DNAm.around.TSS.pdf: DNAm.around.TSS.stat\n" .
+					 "\t$R --slave --args DNAm.around.TSS.stat DNAm.around.TSS < $bin/plot.DNAm.around.tss.R\n\n";
+		push @tasks, "DNAm.around.TSS.pdf";
+	}
 } else {
-	printRed( "Warning: Align-only Mode is ON!" );
+	printYlw( "Warning: Align-only Mode is ON!" );
 }
 
 ################################### statistics && plots ############################
@@ -232,13 +239,15 @@ if( $pe ) {
 	push @tasks, "R2.fqstat.pdf R2.trimmed.fqstat.pdf";
 
 	$makefile .= "Msuite2.w.size: Msuite2.final.bam.bai\n" .
-				 "\t$bin/merge.size.pl per.chr/chr*.size > Msuite2.w.size\n" .
+				 "\t$bin/merge.size.pl w per.chr/chr*.size\n" .
 				 "Msuite2.c.size: Msuite2.final.bam.bai\n" .
-				 "\t$bin/merge.size.pl per.chr/rhr*.size > Msuite2.c.size\n" .
+				 "\t$bin/merge.size.pl c per.chr/rhr*.size\n" .
 				 "Msuite2.size.pdf: Msuite2.w.size Msuite2.c.size\n" .
-				 "\tR --slave --args Msuite2.w.size Msuite2.c.size < $bin/plot.size.R";
+				 "\tR --slave --args Msuite2.size Msuite2.w.size Msuite2.c.size < $bin/plot.size.R\n" .
+				 "Msuite2.lambda.size.pdf: Msuite2.w.size Msuite2.c.size\n" .
+				 "\tR --slave --args Msuite2.lambda.size Msuite2.w.lambda.size Msuite2.c.lambda.size < $bin/plot.size.R";
 
-	push @tasks, "Msuite2.size.pdf";
+	push @tasks, "Msuite2.size.pdf Msuite2.lambda.size.pdf";
 }
 $makefile .= "\n";
 

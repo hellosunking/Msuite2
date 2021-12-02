@@ -91,7 +91,7 @@ int main( int argc, char *argv[] ) {
 			// process bowtie2 tags
 			// remaining tags by bowtie2: I will keep AS and NM tags
 			ss >> cigar >> mateflag >> matepos >> matedist >> seq >> qual;
-			addTag = "\tXG:Z:CT";	// to be compatible to Msuite1
+			addTag.clear();
 			bool AStag = false;
 			bool NMtag = false;
 			while( ss.rdbuf()->in_avail() ) {
@@ -108,7 +108,7 @@ int main( int argc, char *argv[] ) {
 					if( AStag )break;
 				}
 			}
-			addTag += '\n';
+			addTag += "\tXG:Z:CT\n";
 
 			// write output
 			fout << name << "\t0\t" << chr << '\t' << pos << '\t' << score << '\t' << cigar

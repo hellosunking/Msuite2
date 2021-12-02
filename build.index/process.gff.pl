@@ -27,17 +27,23 @@ if( $ARGV[0] =~ /\.bz2$/ ) {
 	open IN, "$ARGV[0]" or die( "$!" );
 }
 while( <IN> ) {
+	next if /^#/;
 	chomp;
+	next unless /\S+/;
 	my @l = split /\t/;
 	## chr1	RefSeq	exon	11874	12227	.	+	.	transcript_id "NR_046018.2_1"; gene_id "DDX11L1"; gene_name "DDX11L1"
-	next unless $l[0] =~ /^chr[\dXY]+$/;	## discard those on chr6_random thing
+#	next unless $l[0] =~ /^chr[\dXY]+$/;	## discard those chr6_random thing; does not work for plants
+	$l[0] = "chr$l[0]" unless $l[0]=~/^chr/i;
 
 	$l[-1] =~ s/"//g;
+	$l[-1] =~ s/;/; /g;
+	$l[-1] =~ s/=/ /g;
 	my $id = '';
-	if( $l[-1] =~ /id (\S+);?/ ) {
+	if( $l[-1] =~ /transcript_id (\S+);?/i ) {
 		$id = $1;
-	} elsif( $l[-1] =~ /transcript_id (\S+);?/ ) {
-		$id = $1;
+	} else {
+#		print STDERR "ERROR: there is NO transcript_id information on line $.!\n";
+		next;
 	}
 	$id =~ s/;$//;
 

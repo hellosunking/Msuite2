@@ -1,7 +1,7 @@
 
-# Msuite2: Multi-mode DNA methylation data analysis suite with enhanced performance
-Version 2.0.0, Aug 2021<br />
-Authors: Lishi Li, Yunyun An, Pengxiang Yuan, Li Ma, Xin Jin, Xin Hong, Kun Sun<br />
+# Msuite2: Multi-mode DNA methylation data analysis suite
+Version 2.0.1, Dec 2021<br />
+Authors: Lishi Li, Xiaojian Liu, Yunyun An, Pengxiang Yuan, Li Ma, Xin Jin, Yu Zhao, Songfa Zhang, Xin Hong, Kun Sun<br />
 Software implemented by Kun Sun \(sunkun@szbl.ac.cn\)<br />
 <br />
 Distributed under the
@@ -21,7 +21,7 @@ The major improvements/changes of Msuite2 are:
 * Runs ~ 1.5x faster than Msuite1 in alignment, ~ 8x faster in methylation call
 * Supports further cutting of reads after adapter-trimming to minimize
   [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
-* Optimized report on data/analysis statistics
+* Optimized statistics report
 
 ## Installation
 `Msuite2` is written in `Perl` and `R` for Linux/Unix platform. To run `Msuite2` you need a Linux/Unix
@@ -54,14 +54,16 @@ quick quality control of your data.)
 
 Then, you can build the genome indices using the following command:
 ```
-user@linux$ build.index/build.index.sh GENOME.FA(or GENOME.DIR) REFSEQ.txt Genome.ID
+user@linux$ build.index/build.index.sh GENOME.FA(or GENOME.DIR) REFSEQ.txt(or Gene.anno.gff) Genome.ID
 ```
 Note that this utility will automatically incorporate the Lambda genome to build the genome indices.
-`Gzip` or `Bzip2` compression of `GENOME.FA` and `REFSEQ.txt` are also supported, but the files must
-contain the corresponding suffix (i.e., `REFSEQ.txt.gz` for `Gzip` compressed and `REFSEQ.txt.bz2` for
-`Bzip2` compressed file). The `Genome.ID` is an identifier that you specified to name your genome and
-the indices will be written to the `index` directory under the root of `Msuite2`. You can add as many
-genomes to `Msuite2` as you need.
+The `REFSEQ.txt` refer to the refGene table file which you can download from UCSC Genome Browser, while
+general GFF format gene annotation file is also supported (the file name MUST contains "gff" string).
+`Gzip` or `Bzip2` compression of `GENOME.FA` and `REFSEQ.txt` (or `Gene.anno.gff`) are also supported,
+only that the files must contain the corresponding suffix (i.e., `REFSEQ.txt.gz` for `Gzip` compressed
+and `REFSEQ.txt.bz2` for `Bzip2` compressed file). The `Genome.ID` is an identifier that you specified
+to name your genome and the indices will be written to the `index` directory under the root of `Msuite2`.
+You can add as many genomes to `Msuite2` as you need.
 
 ## Run Msuite2
 The main program is `msuite2`. You can add its path to your `.bashrc` file under the `PATH` variable
@@ -75,7 +77,7 @@ Call `msuite2` without any parameters to see the usage (or use '-h' option):
 ########## Msuite2: Multi-mode DNA methylation data analysis suite ##########
 
 Author : Kun Sun (sunkun@szbl.ac.cn)
-Version: v2.0.0 (Aug 2021)
+Version: v2.0.1 (Dec 2021)
 
 Usage: msuite [options] -x index -1/-U Read1.fq [ -2 Read2.fq ] -o out.dir
 
@@ -172,17 +174,17 @@ the hg19 reference genome in 4-letter mode, and you want to use 16 threads to sp
 can run:
 ```
 user@linux$ msuite2 -1 /path/to/read1.fq -2 /path/to/read2.fq -x hg19 \
-                    -4 -m TAPS -p 16 -o /path/to/output/dir
+                   -4 -m TAPS -p 16 -o /path/to/output/dir
 ```
 
 ### Example 2
 Your data is generated using BS-seq protocol in 100 bp * 1 (single-end) mode while you only want to analyze the
 first 75 bp of your reads (e.g., due to sequencing quality considerations), and you want to align your data to
 the mm10 reference genome (note that you MUST use 3-letter mode here), and use 32 threads to speed-up the analysis,
-	then you can run:
+then you can run:
 ```
 user@linux$ msuite2 -1 /path/to/read1.fq.gz -x mm10 -c 75 \
-                    -3 -m BS -p 32 -o /path/to/output/dir
+                   -3 -m BS -p 32 -o /path/to/output/dir
 ```
 
 ### Example 3
@@ -193,18 +195,19 @@ issues by DNA overhang, and you want to use 48 threads to speed-up the analysis,
 user@linux$ msuite2 -1 /path/to/lane1.read1.fq.gz,/path/to/lane2.read1.fq.gz,/path/to/lane3.read1.fq.gz \
                    -2 /path/to/lane1.read2.fq.gz,/path/to/lane2.read2.fq.gz,/path/to/lane3.read2.fq.gz \
                    --cut-r1-head 5 --cut-r1-tail 10 --cut-r2-head 5 --cut-r2-tail 10 \
-                   -x hg19 -p 48 -o /path/to/output/dir
+				   -x hg19 -p 48 -o /path/to/output/dir
 ```
 
 If you want to use add all the '.fq' files in your path, you can use the `*` syntax:
 ```
 user@linux$ msuite2 -1 '/path/to/lane*.read1.fq.gz' \
-                    -2 '/path/to/lane*.read2.fq.gz' \
-                    --cut-r1-head 5 --cut-r1-tail 10 --cut-r2-head 5 --cut-r2-tail 10 \
-                    -x hg19 -p 48 -o /path/to/output/dir
+                   -2 '/path/to/lane*.read2.fq.gz' \
+				   --cut-r1-head 5 --cut-r1-tail 10 --cut-r2-head 5 --cut-r2-tail 10 \
+                   -x hg19 -p 48 -o /path/to/output/dir
 ```
 Note that the single quotation mark is essential to protect the '\*' syntax from been extracted by your shell.
 
+<br />
 `Msuite2` will check the data and dependent programs then generate a `makefile` under `/path/to/output/dir`
 ('-o' option). Then you can go to `/path/to/output/dir` and run `make` to perform the analysis:
 ```

@@ -7,25 +7,46 @@ use strict;
 use warnings;
 
 if( $#ARGV < 0 ) {
-	print STDERR "\nUsage: $0 <in.size> [in.size ...]\n\n";
+	print STDERR "\nUsage: $0 <w|c> <in.size> [in.size ...]\n\n";
 	exit 2;
 }
 
-my %size;
+my $strand = shift;
+
+my (%auto_size, %lambda_size);
 foreach my $file ( @ARGV ) {
-	open S, "$file" or die( "$!" );
-	while( <S> ) {
-		next if /^#/;	#Locus	C	T	Z
-		chomp;
-		my @l = split /\t/;
-		$size{$l[0]} += $l[1];
+	if( $file =~ /[cr]hr\d+/ ) {
+		open S, "$file" or die( "$!" );
+		while( <S> ) {
+			next if /^#/;	#size count
+			chomp;
+			my @l = split /\t/;
+			$auto_size{$l[0]} += $l[1];
+		}
+		close S;
+	} elsif( $file =~ /[cr]hrL\./ ) {
+		open S, "$file" or die( "$!" );
+		while( <S> ) {
+			next if /^#/;	#size count
+			chomp;
+			my @l = split /\t/;
+			$lambda_size{$l[0]} += $l[1];
+		}
+		close S;
 	}
-	close S;
 }
 
-print "Size\tCount\n";
-my @cycle = sort {$a<=>$b} keys %size;
+open OUT, ">Msuite2.$strand.size" or die( "$!" );
+print OUT "Size\tCount\n";
+my @cycle = sort {$a<=>$b} keys %auto_size;
 foreach my $i ( $cycle[0] .. $cycle[-1] ) {
-	print join("\t", $i, $size{$i}||0), "\n";
+	print OUT join("\t", $i, $auto_size{$i}||0), "\n";
+}
+
+open OUT, ">Msuite2.$strand.lambda.size" or die( "$!" );
+print OUT "Size\tCount\n";
+@cycle = sort {$a<=>$b} keys %lambda_size;
+foreach my $i ( $cycle[0] .. $cycle[-1] ) {
+	print OUT join("\t", $i, $lambda_size{$i}||0), "\n";
 }
 
