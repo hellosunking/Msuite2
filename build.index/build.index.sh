@@ -19,6 +19,12 @@ indexDIR=$PRG/../index
 #indexDIR=$PRG/index
 lambdaGenome=$PRG/lambda.genome.fa
 
+echo -e "\e[34mInput genome:      $1"
+echo -e "RefSeq annotation: $2"
+echo -e "Lambda genome:     $lambdaGenome"
+echo -e "Index identifier:  $3"
+echo -e "Index location:    $indexDIR/$3\e[39m\n"
+
 id=$3
 if [ $# -gt 3 ]
 then
@@ -28,41 +34,53 @@ else
 fi
 echo "=> INFO: Threads used: $thread"
 
+## check bowtie2
 bb=`which bowtie2-build 2>/dev/null`
-if [ -z "$bb" ]; then
+if [ $? != 0 ] || [ -z "$bb" ]; then
 	echo -e "\e[31mFatal error: Could not find 'bowtie2-build' in your path!\e[39m" >/dev/stderr
 	exit 1
 fi
-
-ver=`$bb --version | perl -ne 'print $1 if /bowtie2-build\S* version ([\d\.]+)/'`
-if [ -z "$ver" ]; then
+bbver=`$bb --version | perl -ne 'print $1 if /bowtie2-build\S* version ([\d\.]+)/'`
+if [ -z "$bbver" ]; then
 	ver=unknown
 fi
+echo -e "\n\e[32mINFO: bowtie2-build (version $bbver) found at '$bb'.\e[39m\n"
 
-echo -e "\n\e[32mINFO: bowtie2-build (version $ver) found at '$bb'.\e[39m\n"
-echo -e "\e[34mInput genome:      $1"
-echo -e "RefSeq annotation: $2"
-echo -e "Lambda genome:     $lambdaGenome"
-echo -e "Index identifier:  $3"
-echo -e "Index location:    $indexDIR/$3\e[39m\n"
+## check hisat2
+hb=`which hisat2-build 2>/dev/null`
+if [ $? != 0 ] || -z "$hb" ]; then
+	echo -e "\e[31mFatal error: Could not find 'hisat2-build' in your path!\e[39m" >/dev/stderr
+	exit 1
+fi
+hbver=`$hb --version | perl -ne 'print $1 if /hisat2-build\S* version ([\d\.]+)/'`
+if [ -z "$hbver" ]; then
+	ver=unknown
+fi
+echo -e "\n\e[32mINFO: hisat2-build (version $hbver) found at '$hb'.\e[39m\n"
 
 echo "Preprocessing genome ..."
 ## prepare directories
 mkdir -p $indexDIR/$id
-mkdir -p $indexDIR/$id/indices
+mkdir -p $indexDIR/$id/indices/bowtie2
+mkdir -p $indexDIR/$id/indices/hisat2
 mkdir -p $indexDIR/$id/fasta
 
 perl $PRG/process.genome.pl $1 $lambdaGenome $indexDIR/$id/
 ##ln -s watson.fa $indexDIR/$id/genome.fa
 
-echo "Building 4-letter indices ..."
-$bb --threads $thread --large-index \
-	$indexDIR/$id/CG2TG.fa $indexDIR/$id/indices/m4 >/dev/null
+echo "Building 4-letter indices for bowtie2 ..."
+$bb --threads $thread $indexDIR/$id/CG2TG.fa $indexDIR/$id/indices/bowtie2/m4 >/dev/null
+echo "Building 3-letter indices for bowtie2 ..."
+$bb --threads $thread $indexDIR/$id/C2T.fa   $indexDIR/$id/indices/bowtie2/m3 >/dev/null
+touch $indexDIR/$id/indices/bowtie2.ready
 
-echo "Building 3-letter indices ..."
-$bb --threads $thread --large-index \
-	$indexDIR/$id/C2T.fa   $indexDIR/$id/indices/m3 >/dev/null
+echo "Building 4-letter indices for hisat2 ..."
+$hb -p $thread $indexDIR/$id/CG2TG.fa $indexDIR/$id/indices/hisat2/m4 >/dev/null
+echo "Building 3-letter indices for hisat2 ..."
+$hb -p $thread $indexDIR/$id/C2T.fa   $indexDIR/$id/indices/hisat2/m3 >/dev/null
+touch $indexDIR/$id/indices/hisat2.ready
 
+echo
 echo "Processing gene annotation ..."
 if [ $2 == "null" ]
 then

@@ -1,6 +1,5 @@
-
 # Msuite2: Multi-mode DNA methylation data analysis suite
-Version 2.0.1, Dec 2021<br />
+Version 2.1.0, Dec 2021<br />
 Authors: Lishi Li, Xiaojian Liu, Yunyun An, Pengxiang Yuan, Li Ma, Xin Jin, Yu Zhao, Songfa Zhang, Xin Hong, Kun Sun<br />
 Software implemented by Kun Sun \(sunkun@szbl.ac.cn\)<br />
 <br />
@@ -18,14 +17,15 @@ visualization, as well as supports both 3- and 4-letter alignment modes.<br />
 The major improvements/changes of Msuite2 are:
 
 * Only aligns the reads to reference genome once
-* Runs ~ 1.5x faster than Msuite1 in alignment, ~ 8x faster in methylation call
-* Supports further cutting of reads after adapter-trimming to minimize
+* Supports usage of Hisat2 as the underline aligner
+* Runs ~ 1.5x faster than Msuite1 in alignment (when both using Bowtie2), ~ 8x faster in methylation call
+* Supports flexiable manipulation of read cycles after adapter-trimming to minimize
   [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
 * Optimized statistics report
 
 ## Installation
 `Msuite2` is written in `Perl` and `R` for Linux/Unix platform. To run `Msuite2` you need a Linux/Unix
-machine with `Bash 4 (or higher)`, `Perl 5.10 (or higher)` and `R 2.10 (or higher)` installed.
+machine with `Bash 4 (or higher)`, `Perl 5.10 (or higher)` and `R 3.0 (or higher)` installed.
 
 This source package contains pre-compiled executable files using `G++ v4.8.5` for Linux x86_64 system.
 If you could not run the analysis normally (which is usually caused by low version of `libc++` library),
@@ -37,11 +37,11 @@ user@linux$ make clean && make
 Note that `Msuite2` depends on the following software:
 
 * [bowtie2](https://github.com/BenLangmead/bowtie2 "bowtie2")
+* [hisat2](https://daehwankimlab.github.io/hisat2 "hisat2")
 * [samtools](http://samtools.sourceforge.net/ "samtools")
 
-Please install them properly and make sure that they are included in your `PATH`.
-In addition, please make sure that the version of your `g++` compiler is higher than 4.8
-(you can use `g++ -v` to check it).
+Please install them properly and make sure that they are included in your `PATH`. In addition, please make
+sure that the version of your `g++` compiler is higher than 4.8 (you can use `g++ -v` to check it).
 
 Before running `Msuite2`, genome indices must be built. To this end, we have prepared a utility named
 `build.index.sh` under the `build.index` directory. To use it, you need to prepare the genome sequence
@@ -77,7 +77,7 @@ Call `msuite2` without any parameters to see the usage (or use '-h' option):
 ########## Msuite2: Multi-mode DNA methylation data analysis suite ##########
 
 Author : Kun Sun (sunkun@szbl.ac.cn)
-Version: v2.0.1 (Dec 2021)
+Version: v2.1.0 (Dec 2021)
 
 Usage: msuite [options] -x index -1/-U Read1.fq [ -2 Read2.fq ] -o out.dir
 
@@ -117,6 +117,9 @@ Optional parameters:
 
   -k kit           Specify the library preparation kit (default: illumina)
                    Note that the current version supports 'illumina', 'nextera' and 'bgi'
+
+  --aligner        Specify the underline aligner (default: bowtie2)
+                   Currently supports bowtie2 and hisat2
 
   --phred33        Read cycle quality scores are in Phred33 format (default)
   --phred64        Read cycle quality scores are in Phred64 format

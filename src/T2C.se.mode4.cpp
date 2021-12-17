@@ -135,9 +135,9 @@ int main( int argc, char *argv[] ) {
 
 			samRecord readsam;
 			register char *psam;
-			register char *rcigar;
 			register bool endC;		// indicators: "C" at the end, "G" at the front, and WATSON strand
 			register char QendC;	// quality score for the "C"
+			char tail_added[8];		// store the modified cigar tail
 
 			string curr_chr;
 			///////////////////////////////////////////// T->C based on conversion log
@@ -145,8 +145,19 @@ int main( int argc, char *argv[] ) {
 //				cerr << "working " << index << "\n";
 				psam = Reads[ index ];
 				// split the sam record
-				parseSAM_mode3( psam, readsam );	// NOTE HERER!!!
+				parseSAM( psam, readsam );	// NOTE HERER!!!
 
+				// check whether it is a primary alignment, discard it if not
+				int flag = 0;
+				for(register int j=readsam.flag; psam[j]!='\t'; ++j) {
+					flag *= 10;
+					flag += psam[j] - '0';
+				}
+				if( flag & 256 ) {      // this is a secondary alignment
+					continue;
+				}
+
+				// get chr
 				curr_chr = psam[ readsam.chr ];
 				register int i = readsam.chr + 1;
 				while( psam[i] != '\t' ) {
@@ -210,26 +221,11 @@ int main( int argc, char *argv[] ) {
 					psam[ readsam.qual      -1 ] = '\0';
 					psam[ readsam.remaining -1 ] = '\0';
 
-					rcigar = psam + readsam.cigar;
 					//psam[ read1sam.mateflag - 1 ] = '\0';
-					unsigned int len = readsam.mateflag - readsam.cigar - 1;
-					i = len - 3;	// len-1 is 'M', len-2 MUST be a digital
-					while( i >= 0 ) {
-						if( rcigar[i] > '9' ) break;	// it is not a digital (should be I/D/), stop here
-						-- i;
-					}
-					++ i;	// now it point to the first digital of the LAST segment; could be 0 (i.e., cigar is xxM only)
+					add_1M_to_cigar_end(psam + readsam.cigar, readsam.mateflag - readsam.cigar - 1, tail_added);
 
-					register int j = 0;
-					for( register int k=i; rcigar[k] != 'M'; ++k ) {
-						j *= 10;
-						j += rcigar[k] - '0';
-					}
-					++ j;	// this is to add the 1M at the end of CIGAR
-					rcigar[i] = '\0';
-
-					fprintf(fp, "%s%dM\t%sC\t%s%c\t%s",
-							psam+readsam.seqName, j, psam+readsam.mateflag,
+					fprintf(fp, "%s%s\t%sC\t%s%c\t%s",
+							psam+readsam.seqName, tail_added, psam+readsam.mateflag,
 							psam+readsam.qual, QendC, psam+readsam.remaining);
 				} else {	// do not need to update CIGAR
 					fprintf(fp, "%s", psam+readsam.seqName);

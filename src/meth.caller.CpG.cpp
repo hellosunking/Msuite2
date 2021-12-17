@@ -202,6 +202,9 @@ void deal_PE_CpG( const char *gfile, const char *samfile, const int cycle, const
 			continue;
 		}
 
+//		cerr << seqName << "\n" << cigar1 << "\t" << seq1 << "\t" << realSEQ1
+//						<< "\n" << cigar2 << "\t" << seq2 << "\t" << realSEQ2 << "\n";
+
 		if( pos1 + realSEQ1.size() <= pos2 ) { //there is NO overlap
 			callmeth_CpG_mbias( realSEQ1, realQUAL1, pos1, g, methcall, mb1, cycle, false );
 			callmeth_CpG_mbias( realSEQ2, realQUAL2, pos2, g, methcall, mb2, cycle, true  );

@@ -3,15 +3,15 @@ Msuite2: bin/preprocessor.pe bin/preprocessor.se bin/T2C.pe.m3 bin/T2C.pe.m4 bin
 
 cc=g++
 ## note that the g++ MUST support c++11 standard (i.e., version 4.8 or higher)
-options=-std=c++11 -O2
-multithread=-fopenmp #-pthread
+options=-std=c++11 -O3 -march=native
+multithread=-fopenmp
 gzsupport=-lz
 
-bin/preprocessor.pe: src/preprocessor.pe.cpp src/common.h
-	$(cc) $(options) $(multithread) $(gzsupport) -o bin/preprocessor.pe src/preprocessor.pe.cpp
+bin/preprocessor.pe: src/preprocessor.pe.cpp src/common.h src/util.h
+	$(cc) $(options) $(multithread) $(gzsupport) -o bin/preprocessor.pe src/preprocessor.pe.cpp src/util.cpp
 
-bin/preprocessor.se: src/preprocessor.se.cpp src/common.h
-	$(cc) $(options) $(multithread) $(gzsupport) -o bin/preprocessor.se src/preprocessor.se.cpp
+bin/preprocessor.se: src/preprocessor.se.cpp src/common.h src/util.h
+	$(cc) $(options) $(multithread) $(gzsupport) -o bin/preprocessor.se src/preprocessor.se.cpp src/util.cpp
 
 bin/T2C.pe.m3: src/T2C.pe.mode3.cpp src/common.h src/util.h src/util.cpp
 	$(cc) $(options) $(multithread) -o bin/T2C.pe.m3 src/T2C.pe.mode3.cpp src/util.cpp

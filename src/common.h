@@ -4,7 +4,7 @@
  * This header file records the constants used in Msuite2
  *
  * Author: Kun Sun (sunkun@szbl.ac.cn)
- * Date  : Jul 2021
+ * Date  : Jan 2022
  *
  *  Adapters
  *

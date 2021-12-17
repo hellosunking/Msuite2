@@ -62,7 +62,30 @@ void loadchr( const char * file, string & seq ) {
 //	cerr << "Load fastq done: length=" << seq.length()-2 << "\n";
 }
 
-// fix cigar
+// add 1M to the end of CIGAR
+// CIGAR: xM[yID]zM[tS]
+// NOTE: this program will break the original cigar, add store the real added 1M part into tail_added
+void add_1M_to_cigar_end(char *cigar, int len, char *tail_added) {
+	char flag_MS = cigar[len-1];  // flag to record the cigar ends with M or S
+	register int i = len - 3;    // len-1 is 'M', len-2 MUST be a digital
+	while( i >= 0 ) {
+			if( cigar[i] > '9' ) break;   // it is not a digital (should be I/D/), stop
+				-- i;
+	}
+	++ i;	// now it point to the first digital of the LAST segment; could be 0 (i.e. cigar is xxM only)
+
+	register int j = 0;
+	for( register int k=i; cigar[k] <= '9'; ++k ) {
+		j *= 10;
+		j += cigar[k] - '0';
+	}
+	++ j;	// this is to add the 1M at the end of CIGAR
+
+	cigar[i] = '\0';
+	sprintf(tail_added, "%d%c", j, flag_MS);
+}
+
+// get read size from CIGAR: deal with I/D/S
 int get_readLen_from_cigar( const string &cigar ) {
 	register int i, j;
 	register int size = 0;
@@ -76,7 +99,7 @@ int get_readLen_from_cigar( const string &cigar ) {
 		} else {        // MUST be M, I, or D
 			if( p[i] == 'M' ) { // match or mismatch, keep
 				size += j;
-			} else if ( p[i] == 'I' ) { // insertion, ignore
+			} else if ( p[i] == 'I' || p[i] == 'S' ) { // insertion or soft clip, ignore
 				// do nothing
 			} else if ( p[i] == 'D' ) { // deletion, add place holders
 				size += j;
@@ -91,6 +114,7 @@ int get_readLen_from_cigar( const string &cigar ) {
 }
 
 // update sequence and quality using CIGAR information to support indels
+// NOTE: Soft-clips are discarded in the current settings
 bool fix_cigar( string &cigar, string &realSEQ, string &realQUAL, string &seq, string &qual ) {
 	register int i, j, k;
 	j = 0;
@@ -102,14 +126,14 @@ bool fix_cigar( string &cigar, string &realSEQ, string &realQUAL, string &seq, s
 		if( cigar[i] <= '9' ) {   // digital
 			j *= 10;
 			j += cigar[i] - '0';
-		} else {	// MUST be M, I, or D
+		} else {	// MUST be M, I, D, or S
 			if( cigar[i] == 'M' ) { // match or mismatch, copy seq and qual
 				for(k=0; k!=j; ++k) {
 					realSEQ  +=  seq[ curr+k ];
 					realQUAL += qual[ curr+k ];
 				}
 				curr += j;
-			} else if ( cigar[i] == 'I' ) { // insertion, discard this part
+			} else if ( cigar[i] == 'I' || cigar[i] == 'S' ) { // insertion or soft clip, discard this part
 				curr += j;
 			} else if ( cigar[i] == 'D' ) { // deletion, add place holders
 				for(k=0; k!=j; ++k) {
@@ -202,7 +226,7 @@ void revert_MDtag(string &raw, string &rev, vector<int> &seg ) {
 }
 
 // segment SAM record
-void parseSAM_mode3( char * psam, samRecord & read ) {
+void parseSAM( char * psam, samRecord & read ) {
 	register unsigned int i = 1;
 	read.seqName = 0;
 	while( true ) {	//flag
@@ -251,6 +275,7 @@ void parseSAM_mode3( char * psam, samRecord & read ) {
 	}
 }
 
+// this is seems not very useful
 void parseSAM_mode4( char * psam, samRecord & read ) {
 	register unsigned int i = 1;
 	read.seqName = 0;
@@ -298,5 +323,60 @@ void parseSAM_mode4( char * psam, samRecord & read ) {
 		if( psam[i]=='\t' ) {psam[i]='\0';++ i;read.remaining = i;break;}
 		++ i;
 	}
+}
+
+// sliding window for quality-trimming
+int get_quality_trim_cycle_se( const char *p, const int read_length, const int min_length, const char min_quality ) {
+	register int i, j, k;
+	register int stop = min_length-1;
+	for( i=read_length-1; i>=stop; ) {
+		if( p[i] >= min_quality ) {
+			k = i - WINDOW_SIZE_QUALITY_TRIM;
+			for( j=i-1; j!=k; --j ) {
+				if( j<0 || p[j]<min_quality ) {
+					break;
+				}
+			}
+			if( j == k ) { // find the quality trimming position
+				break;
+			} else {	// there is a low-quality base in the middle
+				i = j - 1;
+			}
+		} else {
+			-- i;
+		}
+	}
+
+	if( i >= stop )
+		return i + 1;
+	else
+		return 0;
+}
+
+int get_quality_trim_cycle_pe( const char *p, const char *q, const int read_length, const int min_length, const char min_quality ) {
+	register int i, j, k;
+	register int stop = min_length - 1;
+	for( i=read_length-1; i>=stop; ) {
+		if( p[i]>=min_quality && q[i]>=min_quality ) {
+			k = i - WINDOW_SIZE_QUALITY_TRIM;
+			for( j=i-1; j!=k; --j ) {
+				if( j<0 || p[j]<min_quality || q[j]<min_quality ) {
+					break;
+				}
+			}
+			if( j == k ) { // find the quality trimming position
+				break;
+			} else {
+				i = j - 1;
+			}
+		} else {
+			-- i;
+		}
+	}
+	
+	if( i >= stop )
+		return i + 1;
+	else
+		return 0;
 }
 

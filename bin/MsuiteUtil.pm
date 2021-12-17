@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #
 # Author: Kun Sun @ SZBL (sunkun@szbl.ac.cn)
-# Date  : Aug 2021
+# Date  : Jan 2022
 
 package MsuiteUtil;
 
@@ -11,9 +11,13 @@ use Exporter 'import';
 our @EXPORT = qw/$version $ver usage makefile_perchr makefile_methcall mk_samheader detect_cycle check_dependency check_index printRed printGrn printYlw makefile_perchr_v2/;
 
 # long version
-our $version = 'v2.0.1 (Dec 2021)';
+our $version = 'v2.1.0 (Jan 2022)';
 # short version
-our $ver = 'v2.0.1';
+our $ver = 'v2.1.0';
+
+## changes in v2.1.0
+##   1. support Hisat2
+##   2. multi-thread file handlingin preprocessing
 
 sub mk_samheader {
 	my $chrinfo   = shift;
@@ -22,6 +26,7 @@ sub mk_samheader {
 	my $alignmode = shift;
 	my $reads     = shift;
 	my $samheader = shift;
+	my $aligner   = shift || "Bowtie2";
 
 	open OUT, ">$samheader" or die( "$!" );
 
@@ -37,7 +42,7 @@ sub mk_samheader {
 	}
 	close IN;
 
-	print OUT "\@PG\tID:Msuite2\tPN:Msuite2\tVN:$ver\tDS:genome=$genome;protocol=$protocol;mode=$alignmode;reads=$reads\n";
+	print OUT "\@PG\tID:Msuite2\tPN:Msuite2\tVN:$ver\tDS:genome=$genome;protocol=$protocol;aligner=$aligner;mode=$alignmode;reads=$reads\n";
 	close OUT;
 }
 
@@ -76,14 +81,13 @@ sub makefile_perchr {
 	\@touch Msuite2.bai.OK
 
 Msuite2.bam.OK:$job
-	$samtools merge -\@ $THREAD ../Msuite2.final.bam chr*.srt.bam
+	$samtools merge -h $samheader -\@ $THREAD ../Msuite2.final.bam chr*.srt.bam
 	\@touch Msuite2.bam.OK
 
 $mkf";
 
 	close MK;
 }
-
 
 sub makefile_methcall {
 	my $MsuiteBin = shift;
@@ -140,7 +144,6 @@ sub printYlw {
 	print STDERR "\n\033[1;33m$info\033[0m\n\n";
 }
 
-
 sub usage {
 	print <<END_OF_USAGE;
 
@@ -187,6 +190,9 @@ Optional parameters:
 
   -k kit           Specify the library preparation kit (default: illumina)
                    Note that the current version supports 'illumina', 'nextera' and 'bgi'
+
+  --aligner        Specify the underline aligner (default: bowtie2)
+                   Currently supports bowtie2 and hisat2
 
   --phred33        Read cycle quality scores are in Phred33 format (default)
   --phred64        Read cycle quality scores are in Phred64 format
@@ -280,7 +286,26 @@ sub check_dependency {
 		print "INFO: bowtie2 (version $bowtie2_ver) found at '$bowtie2'.\n";
 	} else {
 		printRed( "Fatal error: could not locate 'bowtie2' in your path!" );
-	exit 20;
+		exit 20;
+	}
+
+	my $hisat2 = `which hisat2 2>/dev/null`;
+	chomp( $hisat2 );
+	my $hisat2_ver;
+	if( $hisat2 ) {
+		my $info = `$hisat2 --version`;
+		my @l = split /\n/, $info;
+		foreach ( @l ) {
+			if( /version (\S+)/ ) {
+				$hisat2_ver = $1;
+				last;
+			}
+		}
+		$hisat2_ver = "unknown" unless $hisat2_ver;
+		print "INFO: hisat2 (version $hisat2_ver) found at '$hisat2'.\n";
+	} else {
+		printRed( "Fatal error: could not locate 'hisat2' in your path!" );
+		exit 21;
 	}
 
 	my $samtools = `which samtools 2>/dev/null`;
@@ -296,7 +321,7 @@ sub check_dependency {
 		print "INFO: samtools (version $ver) found at '$samtools'.\n";
 	} else {
 		printRed( "Fatal error: could not locate 'samtools' in your path!" );
-		exit 20;
+		exit 22;
 	}
 
 	my $R = `which R`;
@@ -313,22 +338,24 @@ sub check_dependency {
 
 	} else {
 		printRed( "Fatal error: could not locate 'R' in your path!" );
-		exit 20;
+		exit 23;
 	}
 
-	return ($bowtie2, $bowtie2_ver, $samtools, $R);
+	return ($bowtie2, $bowtie2_ver, $hisat2, $hisat2_ver, $samtools, $R);
 }
 
 sub check_index {
 	my $Msuite2 = shift;
 	my $indexID = shift;
+	my $aligner = shift || 'bowtie2';
 
 	$Msuite2 = "$Msuite2/index";
 
-	unless( -s "$Msuite2/$indexID/chr.info" && -d "$Msuite2/$indexID/indices" && -d "$Msuite2/$indexID/fasta" ) {
-        printRed( "Fatal error: invalid index ($indexID)!\nPlease refer to README file for how to add indice to Msuite2." );
+	unless( -s "$Msuite2/$indexID/chr.info" && -e "$Msuite2/$indexID/indices/$aligner.ready" ) {
+        printRed( "Fatal error: invalid index ($indexID) for $aligner!\nPlease refer to README file for how to add indice to Msuite2." );
 		exit 11;
 	}
+
 	unless( -s "$Msuite2/$indexID/tss.ext.bed" ) {
 		printYlw( "WARNING: TSS annotation file for $indexID is missing/empty!" );
 		return 0;
@@ -374,7 +401,7 @@ sub makefile_perchr_v2 {
 	mv Lambda.srt.bam* ../
 
 ../Msuite2.final.bam:$job
-	$samtools merge -\@ $THREAD ../Msuite2.final.bam chr*.srt.bam
+	$samtools merge -h $samheader -\@ $THREAD ../Msuite2.final.bam chr*.srt.bam
 
 $mkf";
 }

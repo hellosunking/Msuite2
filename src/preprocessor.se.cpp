@@ -9,8 +9,12 @@
 #include <omp.h>
 #include <zlib.h>
 #include "common.h"
+#include "util.h"
 
 using namespace std;
+
+// hisat2 supports 256 character long of read id, and does not has --sam-no-qname-trunc option
+const unsigned int MAX_CONVERTED_READ_ID = 256;
 
 /**
  * Author: Kun Sun (sunkun@szbl.ac.cn)
@@ -65,7 +69,8 @@ int main( int argc, char *argv[] ) {
 			 << "Default parameters:\n"
 			 << "  mode: 0\n"
 			 << "  min.length: 36\n"
-			 << "  min.quality: 53 (33+20 for phred33('!') scoring system)\n\n";
+			 << "  min.quality: 53 (33+20 for phred33('!') scoring system)\n"
+			 << "    Phred64 to Phred33 conversion is automatically ON if min.quality >= 74\n\n";
 
 		return 2;
 	}
@@ -132,6 +137,11 @@ int main( int argc, char *argv[] ) {
 	} else {
 		cerr << "Error: invalid library kit! Currently only supports illumina, nextera, and bgi!\n";
 		return 103;
+	}
+
+	bool changePhred = false;
+	if( quality >= 74 ) {   // consider it is Phred 64, otherwise it means Phred>=40 which is impossible
+		changePhred = true;
 	}
 
 	string base = argv[4];
@@ -304,14 +314,12 @@ int main( int argc, char *argv[] ) {
 
 					// quality control
 					p = qual[ii].c_str();
-					for( i=qual[ii].length()-1; i; --i ) {
-						if( p[i] >= quality ) break;
-					}
-					++ i;
+					i = get_quality_trim_cycle_se( p, qual[ii].length(), min_length, quality );
 					if( i < min_length ) { // not long enough
 						++ dropped[ tn ];
 						continue;
 					}
+
 					seq[ii].resize(  i );
 					qual[ii].resize( i );
 
@@ -394,6 +402,13 @@ int main( int argc, char *argv[] ) {
 					}
 
 					j = seq[ii].size();
+					// convert Phred64 to Phred33 if necessary
+					if( changePhred ) {
+						for( i=0; i!=j; ++i ) {
+							qual[ii][i] -= 31;
+						}
+					}
+
 					p = seq[ii].c_str();
 					for( i=0; i!=j; ++i ) {
 						switch ( p[i] ) {
@@ -435,6 +450,12 @@ int main( int argc, char *argv[] ) {
 						}
 						if( conversionLog.back() == CONVERSION_LOG_SEPARATOR )
 							conversionLog.pop_back();
+
+						if( conversionLog.length() > MAX_CONVERTED_READ_ID ) {
+							++ dropped[tn];
+							continue;
+						}
+
 						bstored[tn] += sprintf( buffer[tn]+bstored[tn], "%s%s\n%s\n+\n%s\n",
 													conversionLog.c_str(),
 													id[ii].c_str(), seq[ii].c_str(), qual[ii].c_str() );
@@ -463,6 +484,12 @@ int main( int argc, char *argv[] ) {
 						}
 						if( conversionLog.back() == CONVERSION_LOG_SEPARATOR )
 							conversionLog.pop_back();
+
+						if( conversionLog.length() > MAX_CONVERTED_READ_ID ) {
+							++ dropped[tn];
+							continue;
+						}
+
 						bstored[tn] += sprintf( buffer[tn]+bstored[tn], "%s%s\n%s\n+\n%s\n",
 									conversionLog.c_str(), id[ii].c_str(), seq[ii].c_str(), qual[ii].c_str() );
 					} else {	// no need to do conversion

@@ -32,13 +32,15 @@ dat = dat[ which(rowSums(dat) > 1000), ];
 
 ## normalization
 for( i in 1:nrow(dat) ) {
-	all = dat[i,2] + dat[i,3] + dat[i,4] + dat[i,5] + dat[i,6];
-	all = all / 100;
-	dat[i,2] = dat[i,2] / all;
-	dat[i,3] = dat[i,3] / all;
-	dat[i,4] = dat[i,4] / all;
-	dat[i,5] = dat[i,5] / all;
-	dat[i,6] = dat[i,6] / all;
+	valid = dat[i,2] + dat[i,3] + dat[i,4] + dat[i,5];
+	all = valid + dat[i,6];
+	valid = valid / 100;
+	dat[i,2] = dat[i,2] / valid;
+	dat[i,3] = dat[i,3] / valid;
+	dat[i,4] = dat[i,4] / valid;
+	dat[i,5] = dat[i,5] / valid;
+
+	dat[i,6] = dat[i,6] / all;	## this is N
 }
 ymax = max( dat[,2:6] ) + 10;
 if( ymax > 100 ) {

@@ -123,16 +123,19 @@ int main( int argc, char *argv[] ) {
 		ss1.clear();
 		ss1 >> name1 >> flag >> chr >> pos1 >> score >> cigar1 >> mateflag >> matepos >> fragSize;
 		//note that the reads are always on FORWARD strand in Msuite2
-		if( score < MIN_ALIGN_SCORE_KEEP || fragSize >= maxinsertion ) {
-			++ discard;
-			continue;
-		}
 
 		ss2.str( read2 );
 		ss2.clear();
 		ss2 >> name2 >> flag >> chr >> pos2;
 
 		if( pos1 > pos2 ) {	// problematic reads, discard
+			++ discard;
+			continue;
+		}
+		if( fragSize < 0 ) {	// this happens when pos1 == pos2
+			fragSize = - fragSize;
+		}
+		if( score < MIN_ALIGN_SCORE_KEEP || fragSize >= maxinsertion ) {
 			++ discard;
 			continue;
 		}
@@ -162,7 +165,7 @@ int main( int argc, char *argv[] ) {
 					case 'C': rev_s1+='G'; break;
 					case 'G': rev_s1+='C'; break;
 					case 'T': rev_s1+='A'; break;
-					default : rev_s1+=*it;
+					default : rev_s1+=*it;	//N?
 				}
 			}
 			rev_q1.assign( qual1.crbegin(), qual1.crend() );

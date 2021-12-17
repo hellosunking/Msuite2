@@ -139,6 +139,8 @@ int main( int argc, char *argv[] ) {
 			samRecord read1sam, read2sam;
 			char newCGAR1[ MAX_CIGAR_SIZE ], newCGAR2[ MAX_CIGAR_SIZE ];
 			register char *r1cigar, *r2cigar;
+			char tail_cigar1[8];
+			char tail_cigar2[8];
 //			char tmpR1[MAX_SAMLINE_SIZE], tmpR2[MAX_SAMLINE_SIZE];
 
 			register char *psam;
@@ -153,7 +155,17 @@ int main( int argc, char *argv[] ) {
 				psam = R1[index];
 				// split the sam record
 //				cerr << " Split R1\n";
-				parseSAM_mode3( psam, read1sam );	// NOTE HERER!!!
+				parseSAM( psam, read1sam );	// NOTE HERER!!!
+
+				// check whether it is a primary alignment, discard it if not;
+				int flag = 0;
+				for(register int j=read1sam.flag; psam[j]!='\t'; ++j) {
+					flag *= 10;
+					flag += psam[j] - '0';
+				}
+				if( flag & 256 ) {      // this is a secondary alignment
+					continue;
+				}
 
 				//// deal seqName
 				// check endC marker
@@ -199,28 +211,12 @@ int main( int argc, char *argv[] ) {
 				r1cigar = psam + read1sam.cigar;
 				if( endC ) {
 					// add 1M to the end of CIGAR
-					// CIGAR: xM[yID]zM
+					// CIGAR: xM[yID]zM[tS]
 ////				psam[ read1sam.cigar    - 1 ] = '\0';
 					//psam[ read1sam.mateflag - 1 ] = '\0';
 					unsigned int len = read1sam.mateflag - read1sam.cigar - 1;
-					i = len - 3;	// len-1 is 'M', len-2 MUST be a digital
-					while( i >= 0 ) {
-						if( r1cigar[i] > '9' ) break;	// it is not a digital (should be I/D/), stop here
-						-- i;
-					}
-					++ i;	// now it point to the first digital of the LAST segment; could be 0 (i.e., cigar is xxM only)
-
-					register int j = 0;
-					for( register int k=i; r1cigar[k] != 'M'; ++k ) {
-						j *= 10;
-						j += r1cigar[k] - '0';
-					}
-					++ j;	// this is to add the 1M at the end of CIGAR
-
-					r1cigar[i] = '\0';
-////				sprintf(newCGAR1, "%s%dM", r1cigar, j);
-					sprintf(newCGAR1, "%dM", j);
-					r1cigar = newCGAR1;
+					add_1M_to_cigar_end(r1cigar, read1sam.mateflag - read1sam.cigar - 1, tail_cigar1);
+//					cerr << "endC: " << r1cigar << ", " << tail_cigar1 << "\n";
 //				} else {	// do not need to update CIGAR
 				}
 
@@ -229,7 +225,7 @@ int main( int argc, char *argv[] ) {
 //				cerr << " R2\n";
 				psam = R2[index];
 				// split the sam record
-				parseSAM_mode3( psam, read2sam );	// NOTE HERER!!!
+				parseSAM( psam, read2sam );	// NOTE HERER!!!
 
 				// look for the conversion log start
 				// look for frontG marker
@@ -282,23 +278,8 @@ int main( int argc, char *argv[] ) {
 ////				psam[ read2sam.cigar    - 1 ] = '\0';
 					psam[ read2sam.matedist - 1 ] = '\0';
 
-					len = read2sam.mateflag - read2sam.cigar - 1;	// length of CIGAR
-					i = len - 3;	// len-1 is always 'M', len-2 MUST be a digital
-					while( i >= 0 ) {
-						if( r2cigar[i] > '9' ) break;	// it is not a digital (should be I/D/), stop here
-						-- i;
-					}
-					++ i;	// now it point to the first digital of the LAST match segment; could be 0 (i.e., cigar is xxM only)
-					unsigned int j = 0;
-					for( register unsigned int k=i; r2cigar[k] != 'M'; ++k ) {
-						j *= 10;
-						j += r2cigar[k] - '0';
-					}
-					++ j;	// this is to add 1M at the end of CIGAR
-					r2cigar[i] = '\0';
-////				sprintf(newCGAR2, "%s%dM", r2cigar, j);
-					sprintf(newCGAR2, "%dM", j);
-					r2cigar = newCGAR2;
+					add_1M_to_cigar_end(r2cigar, read2sam.mateflag - read2sam.cigar - 1, tail_cigar2);
+//					cerr << "frontG: " << r2cigar << ", " << tail_cigar2 << "\n";
 //				} else {	// do not need to update CIGAR
 				}
 //				cerr << "  CIGAR: " << r1cigar << ", " << r2cigar << "\n";
@@ -342,9 +323,9 @@ int main( int argc, char *argv[] ) {
 						psam[ read1sam.remaining- 1 ] = '\0';
 
 						fprintf(fp, "%s%s\t%s\t%d\t%sC\t%s%c\t%s%s%s\t%s\t-%d\t%sC\t%s%c\t%s",
-								psam+read1sam.seqName, r1cigar, psam+read1sam.mateflag, fragsize,
+								psam+read1sam.seqName, tail_cigar1, psam+read1sam.mateflag, fragsize,
 								psam+read1sam.seq, psam+read1sam.qual, QendC, psam+read1sam.remaining,
-								p2+read2sam.seqName, r2cigar, p2+read2sam.mateflag, fragsize,
+								p2+read2sam.seqName, tail_cigar2, p2+read2sam.mateflag, fragsize,
 								p2+read2sam.seq, p2+read2sam.qual, QfrontG, p2+read2sam.remaining);
 					} else {	// no endC, only fragSize changed
 //						cerr << ", frontG only\n";
@@ -352,7 +333,7 @@ int main( int argc, char *argv[] ) {
 						psam[ read1sam.matedist - 1 ] = '\0';
 						fprintf(fp, "%s\t%d\t%s%s%s\t%s\t-%d\t%sC\t%s%c\t%s",
 								psam+read1sam.seqName, fragsize, psam+read1sam.seq,
-								p2+read2sam.seqName, r2cigar, p2+read2sam.mateflag, fragsize,
+								p2+read2sam.seqName, tail_cigar2, p2+read2sam.mateflag, fragsize,
 								p2+read2sam.seq, p2+read2sam.qual, QfrontG, p2+read2sam.remaining);
 					}
 				} else {	// no frontG, then fragSize is NOT affected
@@ -364,7 +345,7 @@ int main( int argc, char *argv[] ) {
 						psam[ read1sam.remaining- 1 ] = '\0';
 
 						fprintf(fp, "%s%s\t%sC\t%s%c\t%s%s",
-								psam+read1sam.seqName, r1cigar, psam+read1sam.mateflag,
+								psam+read1sam.seqName, tail_cigar1, psam+read1sam.mateflag,
 								psam+read1sam.qual, QendC, psam+read1sam.remaining,
 								R2[index]+read2sam.seqName);
 					} else {	// no endC and frontG, ALMOST all elements are not changed

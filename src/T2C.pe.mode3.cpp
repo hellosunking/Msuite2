@@ -147,7 +147,19 @@ int main( int argc, char *argv[] ) {
 				// deal read 1: it always has a smaller genomic coordinate in Msuite2
 				psam = R1[index];
 				// split the sam record
-				parseSAM_mode3( psam, read1sam );
+				parseSAM( psam, read1sam );
+
+				// check whether it is a primary alignment, discard it if not;
+				int flag = 0;
+				for(register int j=read1sam.flag; psam[j]!='\t'; ++j) {
+					flag *= 10;
+					flag += psam[j] - '0';
+				}
+				if( flag & 256 ) {      // this is a secondary alignment
+					continue;
+				}
+
+				// get chr
 				curr_chr = psam[ read1sam.chr ];
 				unsigned int i = read1sam.chr + 1;
 				while( psam[i] != '\t' ) {
@@ -182,7 +194,7 @@ int main( int argc, char *argv[] ) {
 				// deal read 2: should be on the reverse chain
 				psam = R2[index];
 				// split the sam record
-				parseSAM_mode3( psam, read2sam );
+				parseSAM( psam, read2sam );
 
 				i = 0;
 				register unsigned int len = read2sam.qual - read2sam.seq - 1 - 1;

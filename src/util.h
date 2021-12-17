@@ -30,6 +30,8 @@ const unsigned int MIN_QUAL_SCORE	=   33;	// minimum phred score for a CpG site 
                                             // Note: this parameter is not allowed to set by the user in the current version
 const unsigned int MAX_MERGED_SEQ	=  512;
 
+const unsigned int WINDOW_SIZE_QUALITY_TRIM = 5;
+
 typedef struct {
 	unsigned int lineNum;
 	unsigned int score;
@@ -64,13 +66,18 @@ typedef struct {
 	unsigned int seq;
 	unsigned int qual;
 	unsigned int remaining;
-} samRecord;
+} samRecord;	//each element records the position in the char array of the corresponding element
 
 // load genome from multi-fasta
 void loadgenome( const char * file, unordered_map<string, string> & genome );
 void loadchr( const char * file, string & genome );
 
+// quality-trimming
+int get_quality_trim_cycle_se( const char *p, const int read_size, const int min_length, const char min_quality );
+int get_quality_trim_cycle_pe( const char *p, const char *q, const int read_size, const int min_length, const char min_quality );
+
 // fix cigar
+void add_1M_to_cigar_end(char *cigar, int len, char *tail_added);
 int get_readLen_from_cigar( const string &cigar );
 bool fix_cigar(string &cigar, string &realSEQ, string &realQUAL, string &seq, string &qual);
 // segment cigar
@@ -78,7 +85,7 @@ void revert_cigar(string &raw, string &rev, vector<int> &seg );
 void revert_MDtag(string &raw, string &rev, vector<int> &seg );
 
 // segment SAM
-void parseSAM_mode3( char * psam, samRecord & read );
+void parseSAM( char * psam, samRecord & read );
 void parseSAM_mode4( char * psam, samRecord & read );
 
 // usage information for meth.call

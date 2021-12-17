@@ -90,16 +90,19 @@ int main( int argc, char *argv[] ) {
 		ss1.clear();
 		ss1 >> name1 >> flag >> chr >> pos1 >> score >> cigar1 >> mateflag >> matepos >> fragSize;
 		//note that the reads are always on FORWARD strand in Msuite2
-		if( score < MIN_ALIGN_SCORE_KEEP || fragSize >= maxinsertion ) {
-			++ discard;
-			continue;
-		}
 
 		ss2.str( read2 );
 		ss2.clear();
 		ss2 >> name2 >> flag >> chr >> pos2;
 
 		if( pos1 > pos2 ) {	// problematic alignment, discard
+			++ discard;
+			continue;
+		}
+		if( fragSize < 0 ) {	// this happens when pos1 == pos2
+			fragSize = - fragSize;
+		}
+		if( score < MIN_ALIGN_SCORE_KEEP || fragSize >= maxinsertion ) {
 			++ discard;
 			continue;
 		}
@@ -139,14 +142,15 @@ int main( int argc, char *argv[] ) {
 			addTag2.clear();
 			AStag = false;
 			NMtag = false;
+			// TODO: should I keep the MD:Z:10G17G56G14A49 tag?
 			while( ss2.rdbuf()->in_avail() ) {
 				ss2 >> tmp;
-				if( tmp[0]=='A' && tmp[1]=='S' ) {
+				if( tmp[0]=='A' && tmp[1]=='S' ) {	// AS:i:-3
 					addTag2 += '\t';
 					addTag2 += tmp;
 					AStag = true;
 					if( NMtag )break;
-				} else if( tmp[0]=='N' && tmp[1]=='M' ) {
+				} else if( tmp[0]=='N' && tmp[1]=='M' ) {	// NM:i:0
 					addTag2 += '\t';
 					addTag2 += tmp;
 					NMtag = true;
