@@ -167,7 +167,7 @@ Please refer to README file for more information.
 **IMPORTANT NOTE**: If your data is generated using BS-seq protocol, you MUST use the 3-letter mode and set
 `-m BS`. 4-letter mode ONLY supports processing of TAPS/5hmC-CATCH data where the non-CpG methylation is
 very low (e.g., most somatic tissues in human). In addition, Msuite2 could directly analyze the data generated
-by ATAC-me or similar protocols via setting `-k nextera`. You can use '-c cycle' option to control the cycles
+by ATAC-me or similar protocols via setting `-k nextera`. You can use `-c cycle` option to control the cycles
 that you want to analyze (if you do not want to analyze all cycles for some reason).
 
 
@@ -210,9 +210,9 @@ user@linux$ msuite2 -1 '/path/to/lane*.read1.fq.gz' \
 ```
 Note that the single quotation mark is essential to protect the '\*' syntax from been extracted by your shell.
 
-<br />
 `Msuite2` will check the data and dependent programs then generate a `makefile` under `/path/to/output/dir`
 ('-o' option). Then you can go to `/path/to/output/dir` and run `make` to perform the analysis:
+
 ```
 user@linux$ cd /path/to/output/dir; make
 ```
