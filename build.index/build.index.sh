@@ -48,7 +48,7 @@ echo -e "\n\e[32mINFO: bowtie2-build (version $bbver) found at '$bb'.\e[39m\n"
 
 ## check hisat2
 hb=`which hisat2-build 2>/dev/null`
-if [ $? != 0 ] || -z "$hb" ]; then
+if [ $? != 0 ] || [ -z "$hb" ]; then
 	echo -e "\e[31mFatal error: Could not find 'hisat2-build' in your path!\e[39m" >/dev/stderr
 	exit 1
 fi

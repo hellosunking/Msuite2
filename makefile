@@ -3,7 +3,7 @@ Msuite2: bin/preprocessor.pe bin/preprocessor.se bin/T2C.pe.m3 bin/T2C.pe.m4 bin
 
 cc=g++
 ## note that the g++ MUST support c++11 standard (i.e., version 4.8 or higher)
-options=-std=c++11 -O3 -march=native
+options=-std=c++11 -O3
 multithread=-fopenmp
 gzsupport=-lz
 
