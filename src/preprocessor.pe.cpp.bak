@@ -14,10 +14,11 @@
 
 using namespace std;
 
-// hisat2 supports atmost 256 character long of read id, and does not has --sam-no-qname-trunc option
-const unsigned int MAX_CONVERTED_READ_ID = 200;	// leave 56 char for read name
+// hisat2 supports 256 character long of read id, and does not has --sam-no-qname-trunc option
+const unsigned int MAX_CONVERTED_READ_ID = 256;
 
 // changes in v2.1: use 2 threads for file loading; change Phred64 to Phred33 when necessary
+
 /**
  * Author: Kun Sun (sunkun@szbl.ac.cn)
  * This program is part of the Msuite2 package, adapted from Ktrim
@@ -136,7 +137,7 @@ int main( int argc, const char *argv[] ) {
 			 << "  thread: 1\n"
 			 << "  min.length: 36\n"
 			 << "  min.quality: 53 (33+20 for phred33('!', or '#') scoring system)\n"
-			 << "    Phred33 to Phred64 conversion is automatically ON if min.quality >= 74\n"
+			 << "    Phred64 to Phred33 conversion is automatically ON if min.quality >= 74\n"
 			 << "  library: illumina\n"
 			 << "  cut.head.r1: 0\n"
 			 << "  cut.tail.r1: 0\n"

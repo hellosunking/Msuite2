@@ -7,12 +7,11 @@
 #include <sstream>
 #include <omp.h>
 #include <unistd.h>
-#include <tr1/unordered_map>
+#include <unordered_map>
 #include "common.h"
 #include "util.h"
 
 using namespace std;
-using namespace tr1;
 
 /*
  * Author: Kun Sun (sunkun@szbl.ac.cn)
@@ -82,7 +81,7 @@ int main( int argc, char *argv[] ) {
 			cerr << "FATAL: Could not open file " << outfile << " for write.\n";
 			exit(3);
 		}
-		updatedSAM.insert( pair<string, FILE *>(mchr, fp) );
+		updatedSAM.emplace( pair<string, FILE *>(mchr, fp) );
 
 		mchr = "rhr";
 		mchr += chr;
@@ -92,7 +91,7 @@ int main( int argc, char *argv[] ) {
 			cerr << "FATAL: Could not open file " << outfile << " for write.\n";
 			exit(3);
 		}
-		updatedSAM.insert( pair<string, FILE *>(mchr, fp) );
+		updatedSAM.emplace( pair<string, FILE *>(mchr, fp) );
 	}
 	finfo.close();
 

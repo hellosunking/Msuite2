@@ -3,12 +3,11 @@
 #include <string>
 #include <stdlib.h>
 #include <memory.h>
-#include <tr1/unordered_map>
+#include <unordered_map>
 #include "common.h"
 #include "util.h"
 
 using namespace std;
-using namespace std::tr1;
 
 /*
  * Author: Kun Sun (sunkun@szbl.ac.cn)
@@ -312,7 +311,7 @@ void callmeth_CpG_mbias( string &seq, string &qual, int pos,
 			} else {
 				m.C=0; m.T=1; m.Z=1;
 			}
-			methcall.insert( pair<int, meth>( j, m ) );
+			methcall.emplace( pair<int, meth>( j, m ) );
 		} else {
 			if( seq[i] == 'C' ) {
 				++ it->second.C;

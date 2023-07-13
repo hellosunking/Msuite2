@@ -8,8 +8,9 @@ use strict;
 use warnings;
 
 if( $#ARGV < 2 ) {
-	print STDERR "\nUsage: $0 <in.genome> <lambda.genome> <out.dir>\n";
-	print STDERR "\nThis program is designed to treat CpG sites.\n\n";
+	print STDERR "\nUsage: $0 <in.genome> <lambda.genome[,pUC.genome]> <out.dir>\n";
+	print STDERR "\nThis program is designed to treat CpG sites.";
+	print STDERR "\nPlease note that chrL and chrP are reserved, and they are NOT allowed to present in your genome.\n\n";
 	exit 2;
 }
 
@@ -31,22 +32,15 @@ my %g;
 my $chr;
 print "Loading genome files ...\n";
 foreach my $fa ( @falist ) {
-	if( $fa =~ /\.gz$/ ) {
-		open IN, "gzip -cd $fa |" or die( "$!" );
-	} elsif( $fa =~ /\.bz2$/ ) {
-		open IN, "bzip2 -cd $fa |" or die( "$!" );
-	} else {
-		open IN, "$fa" or die( "$!" );
-	}
+	open IN, "less $fa |" or die( "$!" );
 
 	while( <IN> ) {
 		chomp;
-		if( s/^>// ) {
-			$chr = $_;
-			$chr =~ s/\s.*$//;
+		if( s/^>(\S+)// ) {
+			$chr = $1;
 			$chr =~ s/^chr//i;
-			if( $chr eq 'L' ) {	## chrL is reserved for Lambda genome
-				print STDERR "ERORR: Your genome contains chrL, which is NOT permitted! Please rename this chromosome and try again.\n";
+			if( $chr eq 'L' || $chr eq 'P' ) {	## chrL is reserved for Lambda genome
+				print STDERR "ERORR: Your genome contains chrL or chrP, which is NOT permitted! Please rename these chromosomes and try again.\n";
 				close IN;
 				exit 100;
 			}
@@ -58,15 +52,11 @@ foreach my $fa ( @falist ) {
 	close IN;
 }
 
-## add lambda genome
-my $fa = $ARGV[1];
-if( $fa =~ /\.gz$/ ) {
-	open IN, "gzip -cd $fa |" or die( "$!" );
-} elsif( $fa =~ /\.bz2$/ ) {
-	open IN, "bzip2 -cd $fa |" or die( "$!" );
-} else {
-	open IN, "$fa" or die( "$!" );
-}
+## add lambda,pUC19 genome
+my @spikeinfiles = split /,/, $ARGV[1];
+my $lambda_fa = $spikeinfiles[0];
+print "Loading lambda genome: $lambda_fa\n";
+open IN, "less $lambda_fa |" or die( "$!" );
 <IN>;	# chrL header
 $g{'L'} = '';
 while( <IN> ) {
@@ -80,9 +70,26 @@ while( <IN> ) {
 }
 close IN;
 
+if( $#spikeinfiles > 0 ) {	## pUC19 is provided
+	my $pUC19_fa = $spikeinfiles[1];
+	print "Loading pUC19 genome: $pUC19_fa\n";
+	open IN, "less $pUC19_fa |" or die( "$!" );
+	<IN>;	# header
+	$g{'P'} = '';
+	while( <IN> ) {
+		chomp;
+		if( s/^>// ) {
+			print STDERR "ERROR: Your pUC19 genome file is incorrect, please check it.\n";
+			exit 11;
+		} else {
+			$g{'P'} .= uc $_;
+		}
+	}
+	close IN;
+}
+
 print "Processing genome files ...\n";
 my $bp_per_len = 50;
-
 open CG2TG, ">$ARGV[2]/CG2TG.fa"  or die( "$!" );
 open C2T,   ">$ARGV[2]/C2T.fa"    or die( "$!" );
 

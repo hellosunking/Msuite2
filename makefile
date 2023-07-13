@@ -1,4 +1,4 @@
-Msuite2: bin/preprocessor.pe bin/preprocessor.se bin/T2C.pe.m3 bin/T2C.pe.m4 bin/T2C.se.m3 bin/T2C.se.m4 bin/rmdup.w.pe bin/rmdup.c.pe bin/rmdup.w.se bin/rmdup.c.se bin/meth.caller.CpG bin/meth.caller.CpH bin/pair.CpG bin/pair.CpH bin/profile.DNAm.around.TSS util/bed2wig util/extract.meth.in.region
+Msuite2: bin/preprocessor.pe bin/preprocessor.se bin/T2C.pe.m3 bin/T2C.pe.m4 bin/T2C.se.m3 bin/T2C.se.m4 bin/rmdup.w.pe bin/rmdup.c.pe bin/rmdup.w.se bin/rmdup.c.se bin/tag.w.pe bin/tag.w.se bin/tag.c.pe bin/tag.c.se bin/meth.caller.CpG bin/meth.caller.CpH bin/pair.CpG bin/pair.CpH bin/profile.DNAm.around.TSS util/bed2wig util/extract.meth.in.region
 	@echo Build Msuite2 done.
 
 cc=g++
@@ -8,10 +8,10 @@ multithread=-fopenmp
 gzsupport=-lz
 
 bin/preprocessor.pe: src/preprocessor.pe.cpp src/common.h src/util.h
-	$(cc) $(options) $(multithread) $(gzsupport) -o bin/preprocessor.pe src/preprocessor.pe.cpp src/util.cpp
+	$(cc) $(options) $(multithread) -o bin/preprocessor.pe src/preprocessor.pe.cpp src/util.cpp $(gzsupport)
 
 bin/preprocessor.se: src/preprocessor.se.cpp src/common.h src/util.h
-	$(cc) $(options) $(multithread) $(gzsupport) -o bin/preprocessor.se src/preprocessor.se.cpp src/util.cpp
+	$(cc) $(options) $(multithread) -o bin/preprocessor.se src/preprocessor.se.cpp src/util.cpp $(gzsupport)
 
 bin/T2C.pe.m3: src/T2C.pe.mode3.cpp src/common.h src/util.h src/util.cpp
 	$(cc) $(options) $(multithread) -o bin/T2C.pe.m3 src/T2C.pe.mode3.cpp src/util.cpp
@@ -36,6 +36,18 @@ bin/rmdup.c.pe: src/rmdup.c.pe.cpp src/util.h src/util.cpp
 
 bin/rmdup.c.se: src/rmdup.c.se.cpp src/util.h src/util.cpp
 	$(cc) $(options) -o bin/rmdup.c.se src/rmdup.c.se.cpp src/util.cpp
+
+bin/tag.w.pe: src/tag.w.pe.cpp src/util.h src/util.cpp
+	$(cc) $(options) -o bin/tag.w.pe src/tag.w.pe.cpp src/util.cpp
+
+bin/tag.w.se: src/tag.w.se.cpp src/util.h src/util.cpp
+	$(cc) $(options) -o bin/tag.w.se src/tag.w.se.cpp src/util.cpp
+
+bin/tag.c.pe: src/tag.c.pe.cpp src/util.h src/util.cpp
+	$(cc) $(options) -o bin/tag.c.pe src/tag.c.pe.cpp src/util.cpp
+
+bin/tag.c.se: src/tag.c.se.cpp src/util.h src/util.cpp
+	$(cc) $(options) -o bin/tag.c.se src/tag.c.se.cpp src/util.cpp
 
 bin/meth.caller.CpG: src/meth.caller.CpG.cpp src/common.h src/util.h
 	$(cc) $(options) -o bin/meth.caller.CpG src/meth.caller.CpG.cpp src/util.cpp

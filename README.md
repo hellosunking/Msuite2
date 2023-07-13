@@ -1,5 +1,5 @@
 # Msuite2: Multi-mode DNA methylation data analysis suite
-Version 2.1.0, Dec 2021<br />
+Version 2.2.0, Jul 2023<br />
 Authors: Lishi Li, Xiaojian Liu, Yunyun An, Pengxiang Yuan, Li Ma, Xin Jin, Yu Zhao, Songfa Zhang, Xin Hong, Kun Sun<br />
 Software implemented by Kun Sun \(sunkun@szbl.ac.cn\)<br />
 <br />
@@ -21,6 +21,7 @@ The major improvements/changes of Msuite2 are:
 * Runs ~ 1.5x faster than Msuite1 in alignment (when both using Bowtie2), ~ 8x faster in methylation call
 * Supports flexiable manipulation of read cycles after adapter-trimming to minimize
   [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
+* Supports both lambda and pUC19 spike-in sequences
 * Optimized statistics report
 
 ## Installation
@@ -77,7 +78,7 @@ Call `msuite2` without any parameters to see the usage (or use '-h' option):
 ########## Msuite2: Multi-mode DNA methylation data analysis suite ##########
 
 Author : Kun Sun (sunkun@szbl.ac.cn)
-Version: v2.1.0 (Dec 2021)
+Version: v2.2.0 (Jul 2023)
 
 Usage: msuite [options] -x index -1/-U Read1.fq [ -2 Read2.fq ] -o out.dir
 
@@ -152,6 +153,7 @@ Optional parameters:
 
   --align-only     Stop after alignment (i.e., do not perform DNA methylation call and
                    visualization around TSS; default: not set)
+  --keep-dup       Keep duplications in alignment (default: not set)
 
   --CpH            Set this flag to call methylation status of CpH sites (default: not set)
 

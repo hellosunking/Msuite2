@@ -13,7 +13,7 @@ if( $#ARGV < 0 ) {
 
 my $strand = shift;
 
-my (%auto_size, %lambda_size);
+my (%auto_size, %lambda_size, %pUC19_size);
 foreach my $file ( @ARGV ) {
 	if( $file =~ /[cr]hr\d+/ ) {
 		open S, "$file" or die( "$!" );
@@ -33,6 +33,15 @@ foreach my $file ( @ARGV ) {
 			$lambda_size{$l[0]} += $l[1];
 		}
 		close S;
+	} elsif( $file =~ /[cr]hrP\./ ) {
+		open S, "$file" or die( "$!" );
+		while( <S> ) {
+			next if /^#/;	#size count
+			chomp;
+			my @l = split /\t/;
+			$pUC19_size{$l[0]} += $l[1];
+		}
+		close S;
 	}
 }
 
@@ -48,5 +57,12 @@ print OUT "Size\tCount\n";
 @cycle = sort {$a<=>$b} keys %lambda_size;
 foreach my $i ( $cycle[0] .. $cycle[-1] ) {
 	print OUT join("\t", $i, $lambda_size{$i}||0), "\n";
+}
+
+open OUT, ">Msuite2.$strand.pUC19.size" or die( "$!" );
+print OUT "Size\tCount\n";
+@cycle = sort {$a<=>$b} keys %pUC19_size;
+foreach my $i ( $cycle[0] .. $cycle[-1] ) {
+	print OUT join("\t", $i, $pUC19_size{$i}||0), "\n";
 }
 

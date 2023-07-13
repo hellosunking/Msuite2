@@ -5,13 +5,22 @@
 #
 
 args = commandArgs( T );
-if( length(args) != 1 ) {
-	print( "usage: <in.fqstat>" );
+if( length(args) < 1 ) {
+	print( "usage: <in.fqstat> [left.cut=0] [right.cut=0]" );
 	q();
 }
 
 infile = args[1];
 outprefix = args[1];
+leftcut = 0;
+if( length(args) > 1 ) {
+	leftcut = as.numeric( args[2] );
+}
+rightcut = 0;
+if( length(args) > 2 ) {
+	rightcut = as.numeric( args[3] );
+}
+
 cols=c( "blue", "yellow", "green", "red", "black" );
 #A: "azure"
 #C: "Tweety bird"
@@ -51,6 +60,16 @@ pdf( out, width=8, height=4 );
 par( mar=c(5,5,1,1) );
 plot(  dat$N ~ dat$Cycle, type='b', pch=19, col="black", ylim=c(0, ymax),
 		xlab="Sequencing cycles (bp)", ylab="Frequencies (%)", cex.lab=1.5 );
+
+if( leftcut != 0 ) {
+	polygon( x=c(0.5, 0.5, leftcut+0.5, leftcut+0.5),
+			 y=c(0, ymax, ymax, 0), col="grey", border="grey");
+}
+if( rightcut != 0 ) {
+	polygon( x=c(max(dat$Cycle)-rightcut-0.5, max(dat$Cycle)-rightcut-0.5, max(dat$Cycle)+0.5, max(dat$Cycle)+0.5),
+			 y=c(0, ymax, ymax, 0), col="grey", border="grey");
+}
+
 lines( dat$A ~ dat$Cycle, type='b', pch=19, col=cols[1] );
 lines( dat$C ~ dat$Cycle, type='b', pch=19, col=cols[2] );
 lines( dat$G ~ dat$Cycle, type='b', pch=19, col=cols[3] );
@@ -63,6 +82,16 @@ png( out, width=600, height=300 );
 par( mar=c(5,5,1,1) );
 plot(  dat$N ~ dat$Cycle, type='b', pch=16, col="black", ylim=c(0, ymax),
 		xlab="Sequencing cycles (bp)", ylab="Frequencies (%)", cex.lab=1.5 );
+
+if( leftcut != 0 ) {
+	polygon( x=c(0.5, 0.5, leftcut+0.5, leftcut+0.5),
+			 y=c(0, ymax, ymax, 0), col="grey", border="grey");
+}
+if( rightcut != 0 ) {
+	polygon( x=c(max(dat$Cycle)-rightcut-0.5, max(dat$Cycle)-rightcut-0.5, max(dat$Cycle)+0.5, max(dat$Cycle)+0.5),
+			 y=c(0, ymax, ymax, 0), col="grey", border="grey");
+}
+
 lines( dat$A ~ dat$Cycle, type='b', pch=16, col=cols[1] );
 lines( dat$C ~ dat$Cycle, type='b', pch=16, col=cols[2] );
 lines( dat$G ~ dat$Cycle, type='b', pch=16, col=cols[3] );

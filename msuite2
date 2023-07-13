@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 #
 # Author : Kun Sun (sunkun@szbl.ac.cn)
-# Date   : Aug 2021
-# Version: 2.0.0
+# Date   : Jul 2023
+# Version: 2.2.0
 #
 # This is the main program of Msuite2.
 # It will interpret the parameters, prepare data and write makefile.
@@ -19,6 +19,16 @@ use FindBin;
 use lib "$FindBin::RealBin/bin";
 use MsuiteUtil qw/$version $ver usage check_index check_dependency detect_cycle makefile_perchr mk_samheader makefile_methcall printRed printGrn printYlw makefile_perchr_v2/;
 
+## v2.2
+## support "keep-dup" option
+## support pUC19 spike-in
+## add a utility to convert BAM result to BED format
+## only check cut-paramters in PE-mode
+##
+## v2.1.1
+## in plot.fqstat, add polygen for cut-head and cut-tail
+## in plot.size, add the cut ones to the overall size
+##
 ## v2.1
 ## report lambda reads in a separated file
 ## and revise the statistics table
@@ -30,14 +40,13 @@ my $bin    = "$Msuite2/bin";
 my $cwd    = cwd();
 
 ## parameters
-### TODO: add --no-rmdup support
 our ($read1, $cycle, $index, $outdir, $read2, $readU) =
     ('',     0,      '',     ''     , ''    , ''    );
 our ($mode3, $mode4, $protocol, $kit,       $thread, $phred33, $phred64, $minscore, $minsize) =
     (0,      0,      'BS',      'illumina', 0,       0,        0,        20,      , 36      );
 our ($cuthead_r1, $cuttail_r1, $cuthead_r2, $cuttail_r2) =
     (0,           0,           0,           0          );
-our ($minins, $maxins, $call_CpH, $alignonly, $no_rmdup) =
+our ($minins, $maxins, $call_CpH, $alignonly, $keepdup) =
     (0,       1000,    0,         0,          0        );
 our $aligner = "bowtie2";
 our $alignmode;	## 3-/4- letter
@@ -76,7 +85,7 @@ GetOptions(
 
 	"aligner:s"  => \$aligner,
 	"align-only"=> \$alignonly,
-#	"no-rmdup" => \$no_rmdup,
+	"keep-dup" => \$keepdup,
 
 	"help|h"    => \$help,
 	"version|v" => \$showVer
@@ -103,7 +112,6 @@ our ($bowtie2, $bowtie2_ver, $hisat2, $hisat2_ver, $samtools, $R) = check_depend
 
 ## check whether the index is valid or not
 my $TSSanno = check_index( $Msuite2, $index, $aligner );
-
 print "\nINFO: Use Msuite2 root directory '$Msuite2'.\n";
 
 #################################################################################
@@ -122,10 +130,9 @@ my $makefile = '';
 
 # step 1: fastq trimming and alignment
 my $Bowtie2Parameter = "-q --norc --ignore-quals --no-unal --no-head -p $thread --sam-no-qname-trunc";
-## TODO: add soft-clipping support for Hisat2
 #my $Hisat2Parameter  = "-q --norc --ignore-quals --no-unal --no-head -p $thread --no-spliced-alignment -k 1 --no-softclip";
-my $Hisat2Parameter  = "-q --norc --ignore-quals --no-unal --no-head -p $thread --no-spliced-alignment";
-## add "--dovetail" for bowtie2 if 5'-trimming is ON; hisat2 does not has this option
+my $Hisat2Parameter  = "-q --norc --ignore-quals --no-unal --no-head -p $thread --no-spliced-alignment -k 5";
+## TODO: consider add "--dovetail" for bowtie2 if 5'-trimming is ON; hisat2 does not has this option
 my $PEdataParameter  = "--minins $minins --maxins $maxins --no-mixed --no-discordant";
 my $Msuite2Index     = "$Msuite2/index/$index/indices/$aligner";
 my $RawGenome        = "$Msuite2/index/$index/fasta";
@@ -187,15 +194,15 @@ if( $pe ) {	## paired-end data
 }
 
 # step 2: remove duplicate && crick->watson && sam->bam conversion
-mk_samheader( $chrinfo, $index, $protocol, $alignmode, $reads, "$outdir/per.chr/sam.header");
-makefile_perchr_v2( $bin, $samtools, $chrinfo, "sam.header", $seqMode, "$outdir/per.chr/makefile.align", $maxins, $thread );
+mk_samheader( $chrinfo, $index, $protocol, $alignmode, $reads, "$outdir/per.chr/sam.header", $aligner);
+makefile_perchr_v2( $bin, $samtools, $chrinfo, "sam.header", $seqMode, "$outdir/per.chr/makefile.align", $maxins, $thread, $keepdup );
 $makefile .= "Msuite2.final.bam.bai: Msuite2.split.OK #-@ $thread\n\t\@cd per.chr; make -j $thread -f makefile.align; cd ../\n\n";
 push @tasks, "Msuite2.final.bam.bai";
 
 ################################### methylation call ###############################
 # step 3: methylation call && M-bias
 unless( $alignonly ) {
-	makefile_methcall( $bin, $chrinfo, $RawGenome, $seqMode, $protocol, $cycle, "$outdir/per.chr/makefile.CpG");
+	makefile_methcall( $bin, $chrinfo, $RawGenome, $seqMode, $protocol, $cycle, "$outdir/per.chr/makefile.CpG", "CpG", $outdir );
 	$makefile .= "Msuite2.CpG.meth.call: Msuite2.final.bam.bai #-@ $thread\n" .
 				 "\t\@cd per.chr; make -j $thread -f makefile.CpG; cd ../\n\n";
 	push @tasks, "Msuite2.CpG.meth.call";
@@ -223,7 +230,7 @@ unless( $alignonly ) {
 	}
 
 	if( $call_CpH ) {
-		makefile_methcall( $bin, $chrinfo, $RawGenome, $seqMode, $protocol, $cycle, "$outdir/per.chr/makefile.CpH", "CpH");
+		makefile_methcall( $bin, $chrinfo, $RawGenome, $seqMode, $protocol, $cycle, "$outdir/per.chr/makefile.CpH", "CpH", $outdir);
 		$makefile .= "Msuite2.CpH.meth.call: Msuite2.final.bam.bai #-@ $thread\n" .
 					 "\t\@cd per.chr; make -j $thread -f makefile.CpH; cd ../\n\n";
 		push @tasks, "Msuite2.CpH.meth.call";
@@ -245,40 +252,43 @@ unless( $alignonly ) {
 ################################### statistics && plots ############################
 # step 5: fastq statistics and base composition plot
 $makefile .= "R1.fqstat.pdf: Msuite2.trim.log\n" .
-			 "\t$R --slave --args R1.fqstat < $bin/plot.fqstat.R\n" .
+			 "\t$R --slave --args R1.fqstat $cuthead_r1 $cuttail_r1 < $bin/plot.fqstat.R\n" .
 			 "R1.trimmed.fqstat.pdf: Msuite2.trim.log\n" .
 			 "\t$R --slave --args R1.trimmed.fqstat < $bin/plot.fqstat.R\n";
 push @tasks, "R1.fqstat.pdf R1.trimmed.fqstat.pdf";
 if( $pe ) {
 	$makefile .= "R2.fqstat.pdf: Msuite2.trim.log\n" .
-				 "\t$R --slave --args R2.fqstat < $bin/plot.fqstat.R\n" .
+				 "\t$R --slave --args R2.fqstat $cuthead_r2 $cuttail_r2 < $bin/plot.fqstat.R\n" .
 				 "R2.trimmed.fqstat.pdf: Msuite2.trim.log\n" .
 				 "\t$R --slave --args R2.trimmed.fqstat < $bin/plot.fqstat.R\n";
 	push @tasks, "R2.fqstat.pdf R2.trimmed.fqstat.pdf";
 
+	my $cut_size = $cuthead_r1 + $cuthead_r2;
 	$makefile .= "Msuite2.w.size: Msuite2.final.bam.bai\n" .
 				 "\t$bin/merge.size.pl w per.chr/chr*.size\n" .
 				 "Msuite2.c.size: Msuite2.final.bam.bai\n" .
 				 "\t$bin/merge.size.pl c per.chr/rhr*.size\n" .
 				 "Msuite2.size.pdf: Msuite2.w.size Msuite2.c.size\n" .
-				 "\tR --slave --args Msuite2.size Msuite2.w.size Msuite2.c.size < $bin/plot.size.R\n" .
+				 "\tR --slave --args Msuite2.size Msuite2.w.size Msuite2.c.size $cut_size < $bin/plot.size.R\n" .
 				 "Msuite2.lambda.size.pdf: Msuite2.w.size Msuite2.c.size\n" .
-				 "\tR --slave --args Msuite2.lambda.size Msuite2.w.lambda.size Msuite2.c.lambda.size < $bin/plot.size.R";
+				 "\tR --slave --args Msuite2.lambda.size Msuite2.w.lambda.size Msuite2.c.lambda.size $cut_size < $bin/plot.size.R\n" .
+				 "Msuite2.pUC19.size.pdf: Msuite2.w.size Msuite2.c.size\n" .
+				 "\tR --slave --args Msuite2.pUC19.size Msuite2.w.pUC19.size Msuite2.c.pUC19.size $cut_size < $bin/plot.size.R\n";
 
-	push @tasks, "Msuite2.size.pdf Msuite2.lambda.size.pdf";
+	push @tasks, "Msuite2.size.pdf Msuite2.lambda.size.pdf Msuite2.pUC19.size.pdf";
 }
 $makefile .= "\n";
 
 ## step 6: generate final report
 my $report = join(" ", "Msuite2.report/index.html:", @tasks) . "\n" .
 			"\t[ -s R1.fqstat.png ] && mv *png Msuite2.report || echo \"Generating report\"\n" .
-			"\tperl $bin/make.report.pl\n\n";
+			"\tperl $bin/make.report.pl\n";
 
 # write makefile
 open  MK, ">$outdir/makefile" or die("$!");
 print MK $report;
 print MK $makefile;
-print MK "\n\nclean:\n\t\@if [ -s \"Msuite2.report/index.html\" ];then rm -rf *fq *sam per.chr;else echo \"Error: it seems that the analysis has not finished yet.\";fi\n\n";
+print MK "\nclean:\n\t\@if [ -s \"Msuite2.report/index.html\" ];then rm -rf *fq *sam per.chr;else echo \"Error: it seems that the analysis has not finished yet.\";fi\n\n";
 close MK;
 
 print "\nMakefile successfully generated.\n",
@@ -328,8 +338,12 @@ sub prepare_directories {
 			  "Align-only mode\t", ($alignonly) ? 'On':'Off', "\n",
 			  "Call CpH\t", ($call_CpH) ? 'Yes':'No', "\n";
 
+	if( $aligner eq "bowtie2" ) {
+		print OUT "Underline aligner\tBowtie2 (v$bowtie2_ver)\n";
+	} else {
+		print OUT "Underline aligner\tHisat2 (v$hisat2_ver)\n";
+	}
 	print OUT "Running thread\t$thread\n",
-			  "Bowtie2 version\t$bowtie2_ver\n",
 			  "Output directory\t$outdir\n",
 			  "Msuite2 root\t$Msuite2\n";
 	close OUT;
@@ -376,17 +390,6 @@ sub check_parameters {
 	} else {
 		printRed( "Error: Unacceptable library preparation kit parameter!" );
 		return 1;
-	}
-
-	if( $cuthead_r1 + $cuttail_r1 != $cuthead_r2 + $cuttail_r2 ) {
-		printRed( "Error: incorrect cut head/tail parameters!" );
-		return 1;
-	}
-
-	if( $thread == 0 ) {
-		$thread = `grep processor /proc/cpuinfo | wc -l`;
-		chomp( $thread );
-		printYlw( "INFO: thread number is determined as $thread (auto-detected).");
 	}
 
 	if( $minins>$maxins || $maxins==0 ) {
@@ -468,6 +471,12 @@ sub check_parameters {
 			printRed( "Fatal error: Read1 and Read2 do not contain the same amount of files!\n" );
 			exit 11;
 		}
+
+		## check the cut parameter, PE-only
+		if( $cuthead_r1 + $cuttail_r1 != $cuthead_r2 + $cuttail_r2 ) {
+			printRed( "Error: incorrect cut head/tail parameters!" );
+			exit 12;
+		}
 	} else {
 		$pe = '';
 		print "INFO: The input reads will be processed in Single-End mode.\n";
@@ -487,6 +496,11 @@ sub check_parameters {
 		print "INFO: Sequencing cycle is set, only the first $cycle cycles will be analyzed.\n";
 	}
 
+	if( $thread == 0 ) {
+		$thread = `grep processor /proc/cpuinfo | wc -l`;
+		chomp( $thread );
+		print "INFO: thread number is determined as $thread (auto-detected).\n";
+	}
 
 	return 0;
 }

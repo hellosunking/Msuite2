@@ -17,6 +17,10 @@ use MsuiteUtil qw($version $ver);
 my $dir = $ARGV[0] || '.';
 my @color = ( '#E8DAEF', '#D6EAF8' );
 
+unless( -d "$dir/Msuite2.report/" && -s "$dir/Msuite2.conf" ) {
+	print STDERR "ERROR: Incorrect directory structure!\n";
+	exit 1;
+}
 open OUT, ">$dir/Msuite2.report/index.html" or die("$!");
 select OUT;
 
@@ -62,7 +66,7 @@ td {
 text-align: left;
 padding-left: 10px;
 }
-.twoFrame td {
+.multiFrame td {
 text-align: center;
 font-weight:bold;
 }
@@ -91,13 +95,17 @@ close LOG;
 open LOG, "$dir/Msuite2.rmdup.log" or die( "$!" );
 my ($waligned, $wdiscard, $wdup) = (0, 0, 0);
 my ($caligned, $cdiscard, $cdup) = (0, 0, 0);
-my $cntL = 0;
+my ($cntL, $cntP) = (0, 0);
 while( <LOG> ) {
 	my @l = split /\t/;	## chr total discard dup
 
 #	$cntL += $l[1]-$l[2]-$l[3] if $l[0]=~/^[cr]hrL/;
 	if( $l[0]=~/^[cr]hrL/ ) {
 		$cntL += $l[1];
+		next;
+	}
+	if( $l[0]=~/^[cr]hrP/ ) {
+		$cntP += $l[1];
 		next;
 	}
 	## report the original read number due to higher dup rate in lambda
@@ -124,23 +132,28 @@ print "<table id=\"alignStat\" width=\"75%\">\n",
 		"<td width=\"30%\"><b>", digitalize($total), "</b></td></tr>\n",
 		"<tr bgcolor=\"$color[1]\"><td><b>After preprocessing</b></td>",
 		"<td><b>", digitalize($trim), sprintf(" (%.2f %%)", $trim/$total*100), "</b></td></tr>\n";
-
+my $realTotal = $aligned+$cntL+$cntP;
 print "<tr bgcolor=\"$color[0]\"><td><b>Total aligned reads</b></td>",
-		"<td><b>", digitalize($aligned+$cntL), sprintf(" (%.2f %%)", ($aligned+$cntL)/$trim*100), "</b></td></tr>\n",
+		"<td><b>", digitalize($realTotal), sprintf(" (%.2f %%)", $realTotal/$trim*100), "</b></td></tr>\n",
 		"<tr bgcolor=\"$color[0]\"><td>&nbsp;&nbsp;Lambda reads</td>",
-		"<td>&nbsp;&nbsp;", digitalize($cntL), sprintf(" (%.2f %%)", $cntL/($cntL+$aligned)*100), "</td></tr>\n",
-		"<tr bgcolor=\"$color[0]\"><td><b>Non-lambda reads</b></td>",
-		"<td><b>", digitalize($aligned), sprintf(" (%.2f %%)", $aligned/($cntL+$aligned)*100), "</b></td></tr>\n",
+		"<td>&nbsp;&nbsp;", digitalize($cntL), sprintf(" (%.2f %%)", $cntL/$realTotal*100), "</td></tr>\n",
+		"<tr bgcolor=\"$color[0]\"><td>&nbsp;&nbsp;pUC19 reads</td>",
+		"<td>&nbsp;&nbsp;", digitalize($cntP), sprintf(" (%.2f %%)", $cntP/$realTotal*100), "</td></tr>\n",
+		"<tr bgcolor=\"$color[0]\"><td><b>Non-lambda/pUC19 reads</b></td>",
+		"<td><b>", digitalize($aligned), sprintf(" (%.2f %%)", $aligned/$realTotal*100), "</b></td></tr>\n",
 		"<tr bgcolor=\"$color[1]\"><td>&nbsp;&nbsp;Forward chain</td>",
-		"<td>&nbsp;&nbsp;", digitalize($waligned), sprintf(" (%.2f %%)", $waligned/$trim*100), "</td></tr>\n",
+		"<td>&nbsp;&nbsp;", digitalize($waligned), sprintf(" (%.2f %%)", $waligned/$aligned*100), "</td></tr>\n",
 		"<tr bgcolor=\"$color[0]\"><td>&nbsp;&nbsp;Reverse chain</td>",
-		"<td>&nbsp;&nbsp;", digitalize($caligned), sprintf(" (%.2f %%)", $caligned/$trim*100), "</td></tr>\n";
+		"<td>&nbsp;&nbsp;", digitalize($caligned), sprintf(" (%.2f %%)", $caligned/$aligned*100), "</td></tr>\n";
 
 print "<tr bgcolor=\"$color[1]\"><td><b>Low-quality alignments</b></td>",
-		"<td><b>", digitalize($discard), sprintf(" (%.2f %%)", $discard/$aligned*100), "</b></td></tr>\n",
-		"<tr bgcolor=\"$color[0]\"><td><b>PCR duplicates</b></td>",
-		"<td><b>", digitalize($duplicate), sprintf(" (%.2f %%)", $duplicate/$aligned*100), "</b></td></tr>\n",
-		"<tr bgcolor=\"$color[1]\"><td><b>Reported alignments</b></td>",
+		"<td><b>", digitalize($discard), sprintf(" (%.2f %%)", $discard/$aligned*100), "</b></td></tr>\n";
+
+unless( exists $conf{'Keep duplicates'} && $conf{'Keep duplicates'} eq 'Yes' ) {
+print "<tr bgcolor=\"$color[0]\"><td><b>PCR duplicates</b></td>",
+		"<td><b>", digitalize($duplicate), sprintf(" (%.2f %%)", $duplicate/$aligned*100), "</b></td></tr>\n";
+}
+print "<tr bgcolor=\"$color[1]\"><td><b>Reported alignments</b></td>",
 		"<td><b>", digitalize($reported), sprintf(" (%.2f %%)", $reported/$aligned*100), "</b></td></tr>\n",
 	 "</table>\n\n";
 
@@ -150,19 +163,24 @@ print "<h2>Methylation statistics</h2>\n";
 ## load CpG.meth log
 open LOG, "$dir/Msuite2.CpG.meth.log" or die( "$!" );
 my ($wC, $wT, $cC, $cT) = ( 0, 0, 0, 0 );
-my $conversionL = 'NA';
+my ($conversionL, $conversionP) = ('NA', 'NA');
 while( <LOG> ) {
 	next if /^#/;
 	chomp;
 	my @l = split /\t/;	#chr Total.wC Total.wT Total.cC Total.cT
-	if( $l[0] ne 'chrL' ) {
+	if( $l[0] ne 'chrL' && $l[0] ne 'chrP' ) {
 		$wC += $l[1];
 		$wT += $l[2];
 		$cC += $l[3];
 		$cT += $l[4];
-	} else {	## reads mapped to the lambda genome
-		if( $cntL ) {
-			$conversionL = sprintf( "%.2f %%", ($l[2]+$l[4])/($l[1]+$l[2]+$l[3]+$l[4])*100 );
+	} else {	## reads mapped to the lambda/pUC19 genome
+		my $totalCT = $l[1]+$l[2]+$l[3]+$l[4];
+		if( $totalCT ) {
+			if( $l[0] eq 'chrL' ) {
+				$conversionL = sprintf( "%.2f %%", ($l[2]+$l[4])/$totalCT * 100 );
+			} else {
+				$conversionP = sprintf( "%.2f %%", ($l[2]+$l[4])/$totalCT * 100 );
+			}
 		}
 	}
 }
@@ -185,7 +203,9 @@ print "<table id=\"methStat\" width=\"75%\">\n",
 #		"<tr bgcolor=\"$color[1]\"><td><b>Reads mapped to Lambda genome</b></td>",
 #			"<td><b>", digitalize($cntL), " ($ratioL %)</b></td></tr>\n",
 		"<tr bgcolor=\"$color[0]\"><td><b>C-&gt;T conversion rate (lambda reads)</b></td>",
-			"<td><b>$conversionL</b></td></tr>\n";
+			"<td><b>$conversionL</b></td></tr>\n",
+		"<tr bgcolor=\"$color[0]\"><td><b>C-&gt;T conversion rate (pUC19 reads)</b></td>",
+			"<td><b>$conversionP</b></td></tr>\n";
 
 if( $CpH ) {
 ## load CpH.meth log
@@ -222,7 +242,7 @@ print "</table>\n\n";
 }
 ###################################################
 print '<h2>Base composition in the sequenced reads</h2>
-<table class="twoFrame">
+<table class="multiFrame">
 	<tr><td>Read 1 raw sequence</td><td>Read 1 trimmed</td></tr>
 	<tr>
 		<td><img src="R1.fqstat.png" alt="Base composition in read 1 raw"></td>
@@ -241,20 +261,25 @@ if( $pe ) {
 print "</table>\n\n";
 
 if( $pe ) {
-	if( -s "$dir/Msuite2.report/Msuite2.lambda.size.png" ) {
-		print '<h2>Fragment size distribution</h2>
-<table class="twoFrame">
-	<tr><td>Autosomal reads</td><td>Lambda reads</td></tr>
-	<tr>
-		<td><img src="Msuite2.size.png" alt="size of autosomal reads"></td>
-		<td><img src="Msuite2.lambda.size.png" alt="size of lambda reads"></td>
-	</tr>
-</table>';
-	} else {
+	my $all_frame = 1;
+	++ $all_frame if $cntL;
+	++ $all_frame if $cntP;
+
+	unless( $cntL || $cntP ) {	## no Lambda and pUC19
 		print '<h2>Fragment size distribution</h2>
 	<img src="Msuite2.size.png" alt="fragment size distribution"><br />';
+	} else {
+		print '<h2>Fragment size distribution (cuttings on head/tail are included)</h2>
+<table class="multiFrame">
+	<tr><td>Autosomal reads</td>';
+	print '<td>Lambda reads</td>' if $cntL;
+	print '<td>pUC19 reads</td>' if $cntP;
+	print '</tr>
+	<tr><td><img src="Msuite2.size.png" alt="size of autosomal reads"></td>';
+		print '<td><img src="Msuite2.lambda.size.png" alt="size of lambda reads"></td>' if $cntL;
+		print '<td><img src="Msuite2.pUC19.size.png" alt="size of pUC19 reads"></td>' if $cntP;
+		print "</tr>\n</table>\n\n";
 	}
-	print "\n\n";
 }
 
 unless( $alignonly ) {
@@ -271,7 +296,7 @@ print '<h2>Methylation level around TSS</h2>
 print '<h2>M-bias plot</h2>
 ';
 if( $pe ) {
-	print '<table class="twoFrame">
+	print '<table class="multiFrame">
 	<tr><td>Read 1</td><td>Read 2</td></tr>
 	<tr><td><img src="R1.mbias.png" alt="M-bias in read 1"></td>
 	<td><img src="R2.mbias.png" alt="M-bias in read 2"></td></tr>

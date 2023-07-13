@@ -2,14 +2,15 @@
 //#include <fstream>
 //#include <string>
 //#include <sstream>
-#include <unordered_set>
+//#include <tr1/unordered_set>
 #include <stdio.h>
-//#include <stdlib.h>
+#include <stdlib.h>
 //#include <memory.h>
 #include "common.h"
 #include "util.h"
 
 using namespace std;
+//using namespace std::tr1;
 
 /*
  * Author: Kun Sun (sunkun@szbl.ac.cn)
@@ -32,9 +33,8 @@ MD:Z:<S> A string representation of the mismatched reference bases in the alignm
 int main( int argc, char *argv[] ) {
 	if( argc != 5 ) {
 		cerr << "\nUsage: " << argv[0] << " <chr.size> <max.insertion> <in.c.sam> <out.prefix>\n\n"
-			 << "This program is designed to remove the duplicate reads and revert crick to watson chain.\n"
-			 << "Minimum score to keep the alignment: " << MIN_ALIGN_SCORE_KEEP << '\n'
-			 << "Note that for duplicated reads, 1 random one will be kept.\n\n";
+			 << "This program is designed to revert crick to watson chain and fix tags (without rmdup).\n"
+			 << "Minimum score to keep the alignment: " << MIN_ALIGN_SCORE_KEEP << ".\n\n";
 		return 1;
 	}
 
@@ -79,8 +79,6 @@ int main( int argc, char *argv[] ) {
 	}
 
 	// load sam file
-	unordered_set<uint64_t> samHit;
-	register uint64_t key;
 	register unsigned int total = 0;
 	register unsigned int discard = 0;
 	register unsigned int dup = 0;
@@ -139,107 +137,98 @@ int main( int argc, char *argv[] ) {
 			continue;
 		}
 
-		key = pos1;
-		key <<= 32;
-		key |= fragSize;
+		fout << read1 << '\n' << read2 << '\n';
+		++ size[ fragSize ];
 
-		if( samHit.find( key ) == samHit.end() ){	// key is not found, this is NOT a duplicate
-			samHit.emplace( key );
-			fout << read1 << '\n' << read2 << '\n';
-			++ size[ fragSize ];
-
-			//// revert to real-watson chain
-			// Read 1
-			// reclaculate pos
-			pos1 += get_readLen_from_cigar( cigar1 ) - 1;
-			rev_pos1 = chrsize - pos1;
-			// cigar
-			revert_cigar( cigar1, rev_cigar1, revhelper );
-			// sequence and quality: make reverse compliment
-			ss1 >> seq1 >> qual1;
-			rev_s1.clear();
-			for(it=seq1.crbegin(); it!=seq1.crend(); ++it) {
-				switch( *it ) {
-					case 'A': rev_s1+='T'; break;
-					case 'C': rev_s1+='G'; break;
-					case 'G': rev_s1+='C'; break;
-					case 'T': rev_s1+='A'; break;
-					default : rev_s1+=*it;	//N?
-				}
+		//// revert to real-watson chain
+		// Read 1
+		// reclaculate pos
+		pos1 += get_readLen_from_cigar( cigar1 ) - 1;
+		rev_pos1 = chrsize - pos1;
+		// cigar
+		revert_cigar( cigar1, rev_cigar1, revhelper );
+		// sequence and quality: make reverse compliment
+		ss1 >> seq1 >> qual1;
+		rev_s1.clear();
+		for(it=seq1.crbegin(); it!=seq1.crend(); ++it) {
+			switch( *it ) {
+				case 'A': rev_s1+='T'; break;
+				case 'C': rev_s1+='G'; break;
+				case 'G': rev_s1+='C'; break;
+				case 'T': rev_s1+='A'; break;
+				default : rev_s1+=*it;	//N?
 			}
-			rev_q1.assign( qual1.crbegin(), qual1.crend() );
-
-			// remaining tags by bowtie2: I will keep AS and NM tags
-			addTag1.clear();
-			bool AStag = false;
-			bool NMtag = false;
-			while( ss1.rdbuf()->in_avail() ) {
-				ss1 >> tmp;
-				if( tmp[0]=='A' && tmp[1]=='S' ) {
-					addTag1 += '\t';
-					addTag1 += tmp;
-					AStag = true;
-					if( NMtag )break;
-				} else if( tmp[0]=='N' && tmp[1]=='M' ) {
-					addTag1 += '\t';
-					addTag1 += tmp;
-					NMtag = true;
-					if( AStag )break;
-				}
-			}
-			// if there is NO AS an NM tags, now remaining is NULL
-			addTag1 += "\tXG:Z:GA\n";
-
-			// Read 2
-			ss2 >> score_str >> cigar2 >> mateflag >> matepos >> tmp >> seq2 >> qual2;
-
-			pos2 += get_readLen_from_cigar( cigar2 ) - 1;
-			rev_pos2 = chrsize - pos2;
-			revert_cigar( cigar2, rev_cigar2, revhelper );
-
-			rev_s2.clear();
-			for(it=seq2.crbegin(); it!=seq2.crend(); ++it) {
-				switch( *it ) {
-					case 'A': rev_s2+='T'; break;
-					case 'C': rev_s2+='G'; break;
-					case 'G': rev_s2+='C'; break;
-					case 'T': rev_s2+='A'; break;
-					default : rev_s2+=*it;
-				}
-			}
-			rev_q2.assign( qual2.crbegin(), qual2.crend() );
-			// remaining tags by bowtie2: I will keep AS and NM tags
-			addTag2.clear();	// to be compatible to Msuite1
-			AStag = false;
-			NMtag = false;
-			while( ss2.rdbuf()->in_avail() ) {
-				ss2 >> tmp;
-				if( tmp[0]=='A' && tmp[1]=='S' ) {
-					addTag2 += '\t';
-					addTag2 += tmp;
-					AStag = true;
-					if( NMtag )break;
-				} else if( tmp[0]=='N' && tmp[1]=='M' ) {
-					addTag2 += '\t';
-					addTag2 += tmp;
-					NMtag = true;
-					if( AStag )break;
-				}
-			}
-			// if there is NO AS an NM tags, now remaining is NULL
-			addTag2 += "\tXG:Z:GA\n";
-
-			// write output
-			chr[0] = 'c';	// I use rhr for reversed chromosomes, now change back to chr
-			// read1 flag is ALWAYS 83; read2 flag is always 163; mateflag is always '='
-			// I will output R2 first to speed-up sorting
-			fc2w << name2 << "\t163\t" << chr << '\t' << rev_pos2 << '\t' << score_str << '\t' << rev_cigar2
-				 << "\t=\t" << rev_pos1 << '\t'  << fragSize << '\t' << rev_s2 << '\t' << rev_q2 << addTag2
-				 << name1 << "\t83\t" << chr << '\t' << rev_pos1 << '\t' << score_str << '\t' << rev_cigar1
-				 << "\t=\t" << rev_pos2 << "\t-" << fragSize << '\t' << rev_s1 << '\t' << rev_q1 << addTag1;
-		} else {	// this is a duplicate, discard it
-			++ dup;
 		}
+		rev_q1.assign( qual1.crbegin(), qual1.crend() );
+
+		// remaining tags by bowtie2: I will keep AS and NM tags
+		addTag1.clear();
+		bool AStag = false;
+		bool NMtag = false;
+		while( ss1.rdbuf()->in_avail() ) {
+			ss1 >> tmp;
+			if( tmp[0]=='A' && tmp[1]=='S' ) {
+				addTag1 += '\t';
+				addTag1 += tmp;
+				AStag = true;
+				if( NMtag )break;
+			} else if( tmp[0]=='N' && tmp[1]=='M' ) {
+				addTag1 += '\t';
+				addTag1 += tmp;
+				NMtag = true;
+				if( AStag )break;
+			}
+		}
+		// if there is NO AS an NM tags, now remaining is NULL
+		addTag1 += "\tXG:Z:GA\n";
+
+		// Read 2
+		ss2 >> score_str >> cigar2 >> mateflag >> matepos >> tmp >> seq2 >> qual2;
+
+		pos2 += get_readLen_from_cigar( cigar2 ) - 1;
+		rev_pos2 = chrsize - pos2;
+		revert_cigar( cigar2, rev_cigar2, revhelper );
+
+		rev_s2.clear();
+		for(it=seq2.crbegin(); it!=seq2.crend(); ++it) {
+			switch( *it ) {
+				case 'A': rev_s2+='T'; break;
+				case 'C': rev_s2+='G'; break;
+				case 'G': rev_s2+='C'; break;
+				case 'T': rev_s2+='A'; break;
+				default : rev_s2+=*it;
+			}
+		}
+		rev_q2.assign( qual2.crbegin(), qual2.crend() );
+		// remaining tags by bowtie2: I will keep AS and NM tags
+		addTag2.clear();	// to be compatible to Msuite1
+		AStag = false;
+		NMtag = false;
+		while( ss2.rdbuf()->in_avail() ) {
+			ss2 >> tmp;
+			if( tmp[0]=='A' && tmp[1]=='S' ) {
+				addTag2 += '\t';
+				addTag2 += tmp;
+				AStag = true;
+				if( NMtag )break;
+			} else if( tmp[0]=='N' && tmp[1]=='M' ) {
+				addTag2 += '\t';
+				addTag2 += tmp;
+				NMtag = true;
+				if( AStag )break;
+			}
+		}
+		// if there is NO AS an NM tags, now remaining is NULL
+		addTag2 += "\tXG:Z:GA\n";
+
+		// write output
+		chr[0] = 'c';	// I use rhr for reversed chromosomes, now change back to chr
+		// read1 flag is ALWAYS 83; read2 flag is always 163; mateflag is always '='
+		// I will output R2 first to speed-up sorting
+		fc2w << name2 << "\t163\t" << chr << '\t' << rev_pos2 << '\t' << score_str << '\t' << rev_cigar2
+			 << "\t=\t" << rev_pos1 << '\t'  << fragSize << '\t' << rev_s2 << '\t' << rev_q2 << addTag2
+			 << name1 << "\t83\t" << chr << '\t' << rev_pos1 << '\t' << score_str << '\t' << rev_cigar1
+			 << "\t=\t" << rev_pos2 << "\t-" << fragSize << '\t' << rev_s1 << '\t' << rev_q1 << addTag1;
 	}
 	fin.close();;
 	fout.close();

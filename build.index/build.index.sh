@@ -18,10 +18,12 @@ PRG=`dirname $0`
 indexDIR=$PRG/../index
 #indexDIR=$PRG/index
 lambdaGenome=$PRG/lambda.genome.fa
+pUC19Genome=$PRG/pUC19.fa
 
 echo -e "\e[34mInput genome:      $1"
 echo -e "RefSeq annotation: $2"
 echo -e "Lambda genome:     $lambdaGenome"
+echo -e "pUC19 genome:      $pUC19Genome"
 echo -e "Index identifier:  $3"
 echo -e "Index location:    $indexDIR/$3\e[39m\n"
 
@@ -58,14 +60,29 @@ if [ -z "$hbver" ]; then
 fi
 echo -e "\n\e[32mINFO: hisat2-build (version $hbver) found at '$hb'.\e[39m\n"
 
-echo "Preprocessing genome ..."
 ## prepare directories
 mkdir -p $indexDIR/$id
 mkdir -p $indexDIR/$id/indices/bowtie2
 mkdir -p $indexDIR/$id/indices/hisat2
 mkdir -p $indexDIR/$id/fasta
 
-perl $PRG/process.genome.pl $1 $lambdaGenome $indexDIR/$id/
+echo "Processing gene annotation ..."
+if [ $2 == "null" ]
+then
+	echo "WARNING: null is specified as gene annotation file, I will skip this step!"
+else
+	if [[ $2 =~ g[tf]f ]]
+	then
+		echo "Info: processing file in GFF format ..."
+		perl $PRG/process.gff.pl $2 >$indexDIR/$id/tss.ext.bed &
+	else
+		echo "Info: processing file in UCSC's refGene format ..."
+		perl $PRG/process.refGene.pl $2 >$indexDIR/$id/tss.ext.bed &
+	fi
+fi
+
+echo "Preprocessing genome ..."
+perl $PRG/process.genome.pl $1 $lambdaGenome,$pUC19Genome $indexDIR/$id/
 ##ln -s watson.fa $indexDIR/$id/genome.fa
 
 echo "Building 4-letter indices for bowtie2 ..."
@@ -80,22 +97,7 @@ echo "Building 3-letter indices for hisat2 ..."
 $hb -p $thread $indexDIR/$id/C2T.fa   $indexDIR/$id/indices/hisat2/m3 >/dev/null
 touch $indexDIR/$id/indices/hisat2.ready
 
-echo
-echo "Processing gene annotation ..."
-if [ $2 == "null" ]
-then
-	echo "WARNING: null is specified as gene annotation file, I will skip this step!"
-else
-	if [[ $2 =~ gff ]]
-	then
-		echo "Info: processing file in GFF format ..."
-		perl $PRG/process.gff.pl $2 >$indexDIR/$id/tss.ext.bed
-	else
-		echo "Info: processing file in UCSC's refGene format ..."
-		perl $PRG/process.refGene.pl $2 >$indexDIR/$id/tss.ext.bed
-	fi
-fi
-
+wait
 rm -f $indexDIR/$id/CG2TG.fa $indexDIR/$id/C2T.fa
 echo
 echo -e "\e[35mDone. Now you can use \"-x $3\" to use this genome in Msuite2.\e[39m"

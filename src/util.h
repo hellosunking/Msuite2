@@ -4,11 +4,10 @@
 #include <sstream>
 #include <vector>
 #include <map>
-#include <tr1/unordered_map>
+#include <unordered_map>
 #include <stdlib.h>
 
 using namespace std;
-using namespace std::tr1;
 
 /*
  * Author: Kun Sun (sunkun@szbl.ac.cn)

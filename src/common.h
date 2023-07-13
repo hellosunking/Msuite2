@@ -38,8 +38,8 @@ typedef struct {
 typedef struct {
 	const char* adapter_r1;
 	const char* adapter_r2;
-	const unsigned int adapter_len;
 	const char* adapter_index;
+	const unsigned int adapter_len;
 } adapter_info;
 
 //illumina sequencing adapters
@@ -47,14 +47,14 @@ const char* illumina_adapter_sequence = "AGATCGGAAGAGC";
 const unsigned int illumina_adapter_len = 13;	//strlen(illumina_adapter_sequence)
 const char* illumina_adapter_index = "AGA";
 const adapter_info illumina_adapter = {illumina_adapter_sequence, illumina_adapter_sequence,
-										illumina_adapter_len, illumina_adapter_index};
+										illumina_adapter_index, illumina_adapter_len};
 
 //nextera sequencing adapters
 const char* nextera_adapter_sequence = "CTGTCTCTTATACACATCT";
 const unsigned int nextera_adapter_len = 19;	//strlen(nextera_adapter_sequence)
 const char* nextera_adapter_index = "CTG";
 const adapter_info nextera_adapter = {nextera_adapter_sequence, nextera_adapter_sequence,
-										nextera_adapter_len, nextera_adapter_index};
+										nextera_adapter_index, nextera_adapter_len};
 
 //bgi sequencing adapters
 const char* bgi_adapter1_sequence = "AAGTCGGAGGCCAAGCGGTC";
@@ -62,12 +62,12 @@ const char* bgi_adapter2_sequence = "AAGTCGGATCGTAGCCATGT";
 const unsigned int bgi_adapter_len = 19;	//strlen(bgi_adapter_sequence)
 const char* bgi_adapter_index = "AAG";
 const adapter_info bgi_adapter = {bgi_adapter1_sequence, bgi_adapter2_sequence,
-										bgi_adapter_len, bgi_adapter_index};
+										bgi_adapter_index, bgi_adapter_len};
 
 const char FILE_SEPARATOR = ',';		// separator if multiple files are provided
 
-const int READS_PER_BATCH  = 1 << 18;	// process 256K reads per batch (for parallelization)
-const int BUFFER_SIZE_PER_BATCH_READ = 1 << 28;	// 256M buffer for each thread to convert FASTQ
+const int READS_PER_BATCH  = 1 << 20;	// process 1M reads per batch (for parallelization)
+const int BUFFER_SIZE_PER_BATCH_READ = 1 << 30;	// 1G buffer for each thread to convert FASTQ
 
 // seed and error configurations
 const unsigned int impossible_seed = 10000;

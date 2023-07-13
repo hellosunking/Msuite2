@@ -5,9 +5,14 @@
 #
 
 argv = commandArgs(T);
-if( length(argv) != 3 ) {
-	print( 'usage: R --slave --args <out.pdf> <w.size> <c.size> < plot.R' );
+if( length(argv) < 3 ) {
+	print( 'usage: R --slave --args <out.pdf> <w.size> <c.size> [cut.size=0] < plot.R' );
 	q();
+}
+
+cutsize = 0;
+if( length(args) > 3 ) {
+	cutsize = as.numeric( argv[4] );
 }
 
 wsize = read.table( argv[2], head=T );
@@ -15,6 +20,10 @@ csize = read.table( argv[3], head=T );
 if( sum(wsize[,2]) == 0 || sum(csize[,2]) == 0 ) {	## no reads, could be no lambda spike-in
 	q();
 }
+
+wsize[,1] = wsize[,1] + cutsize;
+csize[,1] = csize[,1] + cutsize;
+
 wsize[,2] = wsize[,2] / sum(wsize[,2]) * 100;
 csize[,2] = csize[,2] / sum(csize[,2]) * 100;
 #Size	Count

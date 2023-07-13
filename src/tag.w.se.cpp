@@ -5,27 +5,27 @@
 //#include <map>
 //#include <set>
 //#include <tr1/unordered_map>
-#include <unordered_set>
+//#include <tr1/unordered_set>
 #include <stdio.h>
-//#include <stdlib.h>
+#include <stdlib.h>
 //#include <memory.h>
 #include "common.h"
 
 using namespace std;
+//using namespace std::tr1;
 
 /*
  * Author: Kun Sun (sunkun@szbl.ac.cn)
  * This program is part of the Msuite2 package
- * Date: Jul 2021
+ * Date: Aug 2022
  *
 */
 
 int main( int argc, char *argv[] ) {
 	if( argc != 4 ) {
 		cerr << "\nUsage: " << argv[0] << " <max.insertion=placeholder> <in.w.sam> <out.prefix>\n\n"
-			 << "This program is designed to remove the duplicate reads that have the same start and end/strand.\n"
-			 << "Minimum score to keep the alignment: " << MIN_ALIGN_SCORE_KEEP << '\n'
-			 << "Note that for duplicated reads, a random keep one will be kept.\n\n";
+			 << "This program is designed to fix the tags in SAM (without rmdup).\n"
+			 << "Minimum score to keep the alignment: " << MIN_ALIGN_SCORE_KEEP << ".\n\n";
 
 		return 2;
 	}
@@ -47,8 +47,6 @@ int main( int argc, char *argv[] ) {
 	}
 
 	// load sam file
-	unordered_set<int> samHit;
-	register int key;
 	register unsigned int total = 0;
 	register unsigned int discard = 0;
 	register unsigned int dup = 0;
@@ -83,38 +81,31 @@ int main( int argc, char *argv[] ) {
 			continue;
 		}
 
-		key = pos;
-		if( samHit.find( key ) == samHit.end() ) {	// key is not found, this is NOT a duplicate
-			samHit.emplace( key );
-
-			// process bowtie2 tags
-			// remaining tags by bowtie2: I will keep AS and NM tags
-			ss >> cigar >> mateflag >> matepos >> matedist >> seq >> qual;
-			addTag.clear();
-			bool AStag = false;
-			bool NMtag = false;
-			while( ss.rdbuf()->in_avail() ) {
-				ss >> tmp;
-				if( tmp[0]=='A' && tmp[1]=='S' ) {
-					addTag += '\t';
-					addTag += tmp;
-					AStag = true;
-					if( NMtag )break;
-				} else if( tmp[0]=='N' && tmp[1]=='M' ) {
-					addTag += '\t';
-					addTag += tmp;
-					NMtag = true;
-					if( AStag )break;
-				}
+		// process bowtie2 tags
+		// remaining tags by bowtie2: I will keep AS and NM tags
+		ss >> cigar >> mateflag >> matepos >> matedist >> seq >> qual;
+		addTag.clear();
+		bool AStag = false;
+		bool NMtag = false;
+		while( ss.rdbuf()->in_avail() ) {
+			ss >> tmp;
+			if( tmp[0]=='A' && tmp[1]=='S' ) {
+				addTag += '\t';
+				addTag += tmp;
+				AStag = true;
+				if( NMtag )break;
+			} else if( tmp[0]=='N' && tmp[1]=='M' ) {
+				addTag += '\t';
+				addTag += tmp;
+				NMtag = true;
+				if( AStag )break;
 			}
-			addTag += "\tXG:Z:CT\n";
-
-			// write output
-			fout << name << "\t0\t" << chr << '\t' << pos << '\t' << score << '\t' << cigar
-				 << "\t*\t0\t0\t" << seq << '\t' << qual << addTag;
-		} else {	// this is a duplicate, discard it
-			++ dup;
 		}
+		addTag += "\tXG:Z:CT\n";
+
+		// write output
+		fout << name << "\t0\t" << chr << '\t' << pos << '\t' << score << '\t' << cigar
+			 << "\t*\t0\t0\t" << seq << '\t' << qual << addTag;
 	}
 	fin.close();;
 	fout.close();
@@ -122,9 +113,4 @@ int main( int argc, char *argv[] ) {
 	cout << argv[2] << '\t' << total << '\t' << discard << '\t' << dup << '\n';
 	return 0;
 }
-
-
-
-
-
 

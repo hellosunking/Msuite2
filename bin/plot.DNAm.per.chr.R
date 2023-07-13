@@ -13,21 +13,23 @@ if( length(args) != 3 ) {
 infile    = args[1];
 outprefix = args[3];
 
-dat = read.table( infile, head=T, comment="%" );
+dat = read.table( infile );
+colnames( dat ) = 
+dat = subset(dat, V1 != "chrL" & V1 != "rhrL" & V1 != "chrP" & V1 != "rhrP");
 #chr	Total.wC	Total.wT	Total.cC	Total.cT
 #chr1	10064	40073	9969	40176
 #chr10	6061	23989	5953	23909
 #chr11	5882	23633	5878	23116
 
 protocol = as.character( args[2] );
-if( protocol=="BS" ) {
+if( protocol == "BS" ) {
 	wM = dat[,2]/(dat[,2]+dat[,3])*100;
 	cM = dat[,4]/(dat[,4]+dat[,5])*100;
 } else {
 	wM = dat[,3]/(dat[,2]+dat[,3])*100;
 	cM = dat[,5]/(dat[,4]+dat[,5])*100;
 }
-DNAm=as.matrix(rbind(wM, cM));
+DNAm = as.matrix(rbind(wM, cM));
 
 ## PDF
 out = paste( outprefix, 'pdf', sep='.' );

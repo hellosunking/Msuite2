@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #
 # Author: Kun Sun @ SZBL (sunkun@szbl.ac.cn)
-# Date  : Jan 2022
+# Date  : Jul 2023
 
 package MsuiteUtil;
 
@@ -11,13 +11,17 @@ use Exporter 'import';
 our @EXPORT = qw/$version $ver usage makefile_perchr makefile_methcall mk_samheader detect_cycle check_dependency check_index printRed printGrn printYlw makefile_perchr_v2/;
 
 # long version
-our $version = 'v2.1.0 (Jan 2022)';
+our $version = 'v2.2.0 (Jul 2023)';
 # short version
-our $ver = 'v2.1.0';
+our $ver = 'v2.2.0';
 
+## changes in v2.2
+##   1. support "keep-dup"
+##   2. support pUC19
+##
 ## changes in v2.1.0
 ##   1. support Hisat2
-##   2. multi-thread file handlingin preprocessing
+##   2. multi-thread file handling in preprocessing
 
 sub mk_samheader {
 	my $chrinfo   = shift;
@@ -26,7 +30,7 @@ sub mk_samheader {
 	my $alignmode = shift;
 	my $reads     = shift;
 	my $samheader = shift;
-	my $aligner   = shift || "Bowtie2";
+	my $aligner   = shift || "bowtie2";
 
 	open OUT, ">$samheader" or die( "$!" );
 
@@ -68,7 +72,7 @@ sub makefile_perchr {
 		$mkf .= "$chr.srt.bam: chr$C.sam rhr$C.sam\n";
 		$mkf .= "\t\@$MsuiteBin/rmdup.w.$seqMode $maxins chr$C.sam chr$C >chr$C.rmdup.log\n";
 		$mkf .= "\t\@$MsuiteBin/rmdup.c.$seqMode $size $maxins rhr$C.sam rhr$C >rhr$C.rmdup.log\n";
-		$mkf .= "\t\@cat $samheader chr$C.rmdup.sam rhr$C.c2w.sam | samtools view -bS - | samtools sort -o chr$C.srt.bam -\n\n";
+		$mkf .= "\t\@cat $samheader chr$C.rmdup.sam rhr$C.c2w.sam | samtools view --no-PG -bS - | samtools sort --no-PG -o chr$C.srt.bam -\n\n";
 	}
 	close IN;
 
@@ -81,7 +85,7 @@ sub makefile_perchr {
 	\@touch Msuite2.bai.OK
 
 Msuite2.bam.OK:$job
-	$samtools merge -h $samheader -\@ $THREAD ../Msuite2.final.bam chr*.srt.bam
+	$samtools merge --no-PG -\@ $THREAD ../Msuite2.final.bam chr*.srt.bam
 	\@touch Msuite2.bam.OK
 
 $mkf";
@@ -98,6 +102,7 @@ sub makefile_methcall {
 	my $cycle     = shift;
 	my $makefile  = shift;
 	my $target    = shift || 'CpG';
+	my $outdir    = shift || '..';
 
 	my $job = "";
 	my $mkf = "";
@@ -118,10 +123,10 @@ sub makefile_methcall {
 	open MK, ">$makefile" or die( "$!" );
 
 	print MK
-"Msuite2.$target.meth.call.OK:$job
-	cat $MsuiteBin/meth.header chr*.$target.meth > ../Msuite2.$target.meth.call
-	\@cat chr*.$target.meth.bedgraph > ../Msuite2.$target.meth.bedgraph
-	\@cat chr*.$target.meth.log > ../Msuite2.$target.meth.log
+"Msuite2.$target.meth.call.OK: $job
+	cat $MsuiteBin/meth.header chr*.$target.meth > $outdir/Msuite2.$target.meth.call
+	\@cat chr*.$target.meth.bedgraph > $outdir/Msuite2.$target.meth.bedgraph
+	\@cat chr*.$target.meth.log > $outdir/Msuite2.$target.meth.log
 	\@touch Msuite2.$target.meth.call.OK
 
 $mkf";
@@ -211,13 +216,13 @@ Optional parameters:
   --cut-r2-head N  Cut the head N cycles in read2 (default: 0)
   --cut-r2-tail N  Cut the tail N cycles in read2 (default: 0)
 
-                   Note that the total cut basepairs in read 1 and 2 must be the same
-                   (i.e., cut-r1-head + cut-r1-tail must equal to cut-r2-head + cut-r2-tail)
+                   Note that the total cut basepairs in read 1 and 2 MUST be the same,
+                   i.e., cut-r1-head + cut-r1-tail == cut-r2-head + cut-r2-tail
 
                    In BS-seq, read2 starts from the 3'-end which frequently suffer from
-                   DNA damage issues, and the DNA repair step in library prepraration usually
-                   uses un-methylated Cytosines which lead to bias in DNA methylation calling
-                   as commonly seen in the M-bias plot.
+                   DNA damage issues, and the DNA repair step during library prep usually
+                   uses un-methylated Cytosines, which lead to bias in DNA methylation
+                   calls as commonly seen in the M-bias plot.
 
   --minins MIN     Minimum insert size (default: 0)
   --maxins MAX     Maximum insert size (default: 1000)
@@ -225,12 +230,13 @@ Optional parameters:
 
   --align-only     Stop after alignment (i.e., do not perform DNA methylation call and
                    visualization around TSS; default: not set)
+  --keep-dup       Keep duplications in alignment (default: not set)
 
   --CpH            Set this flag to call methylation status of CpH sites (default: not set)
 
   -p threads       Specify how many threads should be used (default: use all threads)
 
-  -h/--help        Show this help information and quit
+  -h/--help        Show the help information and quit
   -v/--version     Show the software version and quit
 
 Please refer to README file for more information.
@@ -373,6 +379,8 @@ sub makefile_perchr_v2 {
 	my $makefile  = shift;
 	my $maxins    = shift || 1000;
 	my $THREAD    = shift || 1;
+	my $keepdup   = shift || 0;
+	my $outdir    = shift || '..';
 
 	my $job = "";
 	my $mkf = "";
@@ -383,25 +391,33 @@ sub makefile_perchr_v2 {
 		my ($C, $size) = split /\t/;	## chr size
 		my $chr = "chr$C";
 		$chr = "Lambda" if $C eq 'L';
+		$chr = "pUC19"  if $C eq 'P';
 
 		$job .= " $chr.srt.bam";
 		$mkf .= "$chr.srt.bam: chr$C.sam rhr$C.sam\n";
-		$mkf .= "\t\@$MsuiteBin/rmdup.w.$seqMode $maxins chr$C.sam chr$C >chr$C.rmdup.log\n";
-		$mkf .= "\t\@$MsuiteBin/rmdup.c.$seqMode $size $maxins rhr$C.sam rhr$C >rhr$C.rmdup.log\n";
-		$mkf .= "\t\@cat $samheader chr$C.rmdup.sam rhr$C.c2w.sam | samtools view -bS - | samtools sort -o $chr.srt.bam -\n\n";
+		if( $keepdup == 1 ) {
+			$mkf .= "\t\@$MsuiteBin/tag.w.$seqMode $maxins chr$C.sam chr$C >chr$C.rmdup.log\n";
+			$mkf .= "\t\@$MsuiteBin/tag.c.$seqMode $size $maxins rhr$C.sam rhr$C >rhr$C.rmdup.log\n";
+		} else {
+			$mkf .= "\t\@$MsuiteBin/rmdup.w.$seqMode $maxins chr$C.sam chr$C >chr$C.rmdup.log\n";
+			$mkf .= "\t\@$MsuiteBin/rmdup.c.$seqMode $size $maxins rhr$C.sam rhr$C >rhr$C.rmdup.log\n";
+		}
+		$mkf .= "\t\@cat $samheader chr$C.rmdup.sam rhr$C.c2w.sam | samtools view --no-PG -bS - | samtools sort --no-PG -o $chr.srt.bam -\n\n";
 	}
 	close IN;
 
 	open MK, ">$makefile" or die( "$!" );
 	print MK
-"../Msuite2.final.bam.bai: ../Msuite2.final.bam
-	$samtools index -\@ $THREAD ../Msuite2.final.bam
-	\@cat *rmdup.log > ../Msuite2.rmdup.log
+"$outdir/Msuite2.final.bam.bai: $outdir/Msuite2.final.bam
+	$samtools index -\@ $THREAD $outdir/Msuite2.final.bam
+	\@cat *rmdup.log > $outdir/Msuite2.rmdup.log
 	$samtools index -\@ $THREAD Lambda.srt.bam
-	mv Lambda.srt.bam* ../
+	mv Lambda.srt.bam* $outdir/
+	$samtools index -\@ $THREAD pUC19.srt.bam
+	mv pUC19.srt.bam* $outdir/
 
-../Msuite2.final.bam:$job
-	$samtools merge -h $samheader -\@ $THREAD ../Msuite2.final.bam chr*.srt.bam
+$outdir/Msuite2.final.bam: $job
+	$samtools merge --no-PG -\@ $THREAD $outdir/Msuite2.final.bam chr*.srt.bam
 
 $mkf";
 }

@@ -22,7 +22,7 @@ dat = read.table( infile, head=T );
 out = paste( outprefix, 'pdf', sep='.' );
 pdf( out, width=9, height=6 );
 par( mar=c(5,5,1,1) );
-plot(  dat$Watson ~ dat$Distance, type='l', lwd=4, col="red", ylim=c(0,80),
+plot(  dat$Watson ~ dat$Distance, type='l', lwd=4, col="red", ylim=c(0,100),
 		xlab="Distance from TSS on forward chain (bp)", ylab="Methylation density (%)", cex.lab=1.5 );
 lines( dat$Crick  ~ dat$Distance, lwd=4, col="blue" );
 legend( 'top', c('Watson', 'Crick'), col=c('red', 'blue'), lty=c(1,1), bty='n', cex=1.5 );
@@ -32,7 +32,7 @@ dev.off();
 out = paste( outprefix, 'png', sep='.' );
 png( out, width=1080, height=540 );
 par( mar=c(5,5,1,1) );
-plot( dat$Watson ~ dat$Distance, type='l', lwd=4, col="red", ylim=c(0, 80),
+plot( dat$Watson ~ dat$Distance, type='l', lwd=4, col="red", ylim=c(0, 100),
 		xlab="Distance from TSS (bp)", ylab="Methylation density (%)", cex.lab=1.5 );
 lines( dat$Crick  ~ dat$Distance, lwd=4, col="blue" );
 legend( 'top', c('Watson', 'Crick'), col=c('red', 'blue'), lty=c(1,1), bty='n', cex=1.5 );
