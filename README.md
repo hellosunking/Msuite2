@@ -66,6 +66,9 @@ and `REFSEQ.txt.bz2` for `Bzip2` compressed file). The `Genome.ID` is an identif
 to name your genome and the indices will be written to the `index` directory under the root of `Msuite2`.
 You can add as many genomes to `Msuite2` as you need.
 
+**Important Note:** The indices for Msuite2 v2.2 is NOT compatible with earlier versions due to the support
+for pUC19 spike-in. Please re-build the indices if you upgrade to Msuite2 v2.2 from earlier versions.
+
 ## Run Msuite2
 The main program is `msuite2`. You can add its path to your `.bashrc` file under the `PATH` variable
 to call it from anywhere, or you can run the following command to add it to your current session:
