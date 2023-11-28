@@ -21,7 +21,7 @@ The major improvements/changes of Msuite2 are:
 * Runs ~ 1.5x faster than Msuite1 in alignment (when both using Bowtie2), ~ 8x faster in methylation call
 * Supports flexiable manipulation of read cycles after adapter-trimming to minimize
   [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
-* Supports both lambda and pUC19 spike-in sequences (v2.2 or higher)
+* Supports both lambda and pUC19 (from v2.2) spike-in sequences
 * Optimized statistics report
 
 ## Installation
