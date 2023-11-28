@@ -21,7 +21,7 @@ The major improvements/changes of Msuite2 are:
 * Runs ~ 1.5x faster than Msuite1 in alignment (when both using Bowtie2), ~ 8x faster in methylation call
 * Supports flexiable manipulation of read cycles after adapter-trimming to minimize
   [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
-* Supports both lambda and pUC19 spike-in sequences
+* Supports both lambda and pUC19 spike-in sequences (v2.2 or higher)
 * Optimized statistics report
 
 ## Installation
@@ -66,7 +66,7 @@ and `REFSEQ.txt.bz2` for `Bzip2` compressed file). The `Genome.ID` is an identif
 to name your genome and the indices will be written to the `index` directory under the root of `Msuite2`.
 You can add as many genomes to `Msuite2` as you need.
 
-**Important Note:** The indices for Msuite2 v2.2 is NOT compatible with earlier versions due to the support
+**Important Note:** Msuite2 v2.2 is NOT compatible with indices built in earlier versions due to support
 for pUC19 spike-in. Please re-build the indices if you upgrade to Msuite2 v2.2 from earlier versions.
 
 ## Run Msuite2
