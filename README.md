@@ -250,14 +250,12 @@ The alignment results are recorded in the file `Msuite2.final.bam` (in standard 
 
 You can run `make clean` in the OUTDIR to delete the intermediate files to save storage space.
 
-
 ## Utilities
 ### Mviewer
 `Msuite2` contains a visualization tool named `Mviewer`, adapted from the authors' previous
 [BSviewer](http://sunlab.cpy.cuhk.edu.hk/BSviewer/) software. It is specially optimized to be compatiable
 with `Msuite2` alignment results and provides nucleotide-level, genotype-preserved DNA methylation data
 visualization. For more information, please refer to README file in `Mviewer` directory.
-
 
 ### Others
 `Msuite2` also provides other utilities under the `util` directory.<br />
@@ -270,6 +268,21 @@ given regions (e.g., CpG islands, promoters).<br />
 
 The `pe_bam2bed.pl` and `se_bam2bed.pl` are designed to translate the aligned BAM file into BED format file, and
 `bed2wig` is designed to translate BED file into WIG files (e.g., for coverage profiles).<br />
+
+## Citation
+When referencing, please cite
+
+"Sun K, Li L, Ma L, Zhao Y, Deng L, Wang H, Sun H:
+**Msuite: a high-performance and versatile DNA methylation data analysis toolkit.**
+*Patterns (N Y)* 2020 Nov 13; 1(8):100127."
+[Full Text](https://doi.org/10.1016/j.patter.2020.100127 "Full text")
+
+or
+
+"Li L, An Y, Ma L, Yang M, Yuan P, Liu X, Jin X, Zhao Y, Zhang S, Hong X, Sun K:
+**Msuite2: all-in-one DNA methylation data analysis toolkit with enhanced usability and performance.**
+*Comput Struct Biotechnol J.* 2022 Mar 10; 20:1271-1276."
+[Full Text](https://doi.org/10.1016/j.csbj.2022.03.005 "Full text")
 
 ---
 Please send bug reports to Kun Sun \(sunkun@szbl.ac.cn\).<br />
