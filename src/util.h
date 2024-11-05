@@ -20,6 +20,8 @@ using namespace std;
 
 const unsigned int MAX_FILE_NAME = 128;
 
+const unsigned int WINDOW_SIZE_QUALITY_TRIM = 5;
+
 const uint64_t READS_GA = 0xf0ULL << 32;
 const uint64_t READS_CT = 0x0fULL << 32;
 
@@ -28,8 +30,6 @@ const unsigned int MAX_CpG_COVER	=  512;	// maximum CpG coverage of a fragment
 const unsigned int MIN_QUAL_SCORE	=   33;	// minimum phred score for a CpG site to be considered;
                                             // Note: this parameter is not allowed to set by the user in the current version
 const unsigned int MAX_MERGED_SEQ	=  512;
-
-const unsigned int WINDOW_SIZE_QUALITY_TRIM = 5;
 
 typedef struct {
 	unsigned int lineNum;

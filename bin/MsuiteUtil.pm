@@ -1,20 +1,23 @@
 #!/usr/bin/perl
 #
 # Author: Kun Sun @ SZBL (sunkun@szbl.ac.cn)
-# Date  : Jul 2023
+# Date  : Jan 2022
 
 package MsuiteUtil;
 
 use strict;
 use warnings;
 use Exporter 'import';
-our @EXPORT = qw/$version $ver usage makefile_perchr makefile_methcall mk_samheader detect_cycle check_dependency check_index printRed printGrn printYlw makefile_perchr_v2/;
+our @EXPORT = qw/$version $ver $url usage makefile_perchr makefile_methcall mk_samheader detect_cycle check_dependency check_index printRed printGrn printYlw makefile_perchr_v2/;
 
 # long version
-our $version = 'v2.2.0 (Jul 2023)';
+our $version = 'v2.2.2 (Aug 2024)';
 # short version
-our $ver = 'v2.2.0';
+our $ver = 'v2.2.2';
+our $url = 'https://github.com/hellosunking/Msuite2/';
 
+## v2.2.1
+##   1. optimize statistics for spike-in
 ## changes in v2.2
 ##   1. support "keep-dup"
 ##   2. support pUC19
@@ -124,9 +127,9 @@ sub makefile_methcall {
 
 	print MK
 "Msuite2.$target.meth.call.OK: $job
-	cat $MsuiteBin/meth.header chr*.$target.meth > $outdir/Msuite2.$target.meth.call
-	\@cat chr*.$target.meth.bedgraph > $outdir/Msuite2.$target.meth.bedgraph
-	\@cat chr*.$target.meth.log > $outdir/Msuite2.$target.meth.log
+	cat $MsuiteBin/meth.header chr*.$target.meth >$outdir/Msuite2.$target.meth.call
+	\@cat chr*.$target.meth.bedgraph | gzip >$outdir/Msuite2.$target.meth.bedgraph.gz
+	\@cat chr*.$target.meth.log >$outdir/Msuite2.$target.meth.log
 	\@touch Msuite2.$target.meth.call.OK
 
 $mkf";
@@ -161,28 +164,28 @@ Version: $version
 
 Compulsory parameters:
 
-  -1/-U Read1.fq   Specify the path to the files containing read 1
+  -1/-U Read1.fq   Specify the path to the file(s) containing read 1
                    If your data is Paired-end, specify read 2 files using '-2' option
                    Note that if -U is used, '-2' will be ignored no matter it's set or not
 
                    If you have multiple files, use ',' to separate them or use '*' syntax
-                   (Note that single quotation marks are required for '*' syntax)
+                   Note that single quotation marks are required for '*' syntax
 
   -x index         Specify the genome index
-                   Please refer to README file on how to build index for Msuite
+                   Please refer to README file on how to build index for Msuite2
 
   -o out.dir       Specify the output directory
-                   Note that your specified directory will be created if it does not exist
-                   otherwise the files under that directory could get over-written
+                   The specified directory will be created if it does not exist,
+                   otherwise the files under that directory would get over-written
 
 
 Optional parameters:
 
-  -2 Read2.fq      Specify the path to the file containing read 2
+  -2 Read2.fq      Specify the path to the file(s) containing read 2
                    Use this parameter if your data is generated in paired-end mode
 
                    If you have multiple files, use ',' to separate them or use '*' syntax
-                   Note that all files must be correctly paired in '-1' and '-2'
+                   Note that all files must be properly paired in '-1' and '-2'
 
   -3               Use 3-letter alignment (default)
   -4               Use 4-letter alignment
@@ -191,13 +194,10 @@ Optional parameters:
   -m BS/TAPS       Specify the library protocol (default: BS)
                    Note that only 'TAPS' and 'BS' are acceptable
 
-  -c cycle         Specify the seqeuencing cycles of the data (default: auto-detect)
+  -c cycle         Specify the sequencing cycles of the data (default: auto-detect)
 
   -k kit           Specify the library preparation kit (default: illumina)
-                   Note that the current version supports 'illumina', 'nextera' and 'bgi'
-
-  --aligner        Specify the underline aligner (default: bowtie2)
-                   Currently supports bowtie2 and hisat2
+                   Currently supports 'illumina', 'nextera' and 'bgi'
 
   --phred33        Read cycle quality scores are in Phred33 format (default)
   --phred64        Read cycle quality scores are in Phred64 format
@@ -205,9 +205,6 @@ Optional parameters:
 
   -q score         The minimum quality score to keep the cycle (default: 20)
                    Note that 20 means 1% error rate, 30 means 0.1% error rate in Phred
-
-                   Sometimes quality scores start from 35 ('#') in the FASTQ files,
-                   in this case you could adjust '-q' option, e.g., '--phred33 -q 22'
 
   --minsize size   Minimum read size to be kept for alignment (default: 36)
 
@@ -217,12 +214,15 @@ Optional parameters:
   --cut-r2-tail N  Cut the tail N cycles in read2 (default: 0)
 
                    Note that the total cut basepairs in read 1 and 2 MUST be the same,
-                   i.e., cut-r1-head + cut-r1-tail == cut-r2-head + cut-r2-tail
+                   i.e., cut-r1-head + cut-r1-tail = cut-r2-head + cut-r2-tail
 
-                   In BS-seq, read2 starts from the 3'-end which frequently suffer from
-                   DNA damage issues, and the DNA repair step during library prep usually
-                   uses un-methylated Cytosines, which lead to bias in DNA methylation
-                   calls as commonly seen in the M-bias plot.
+                   In BS-seq, the 3'-end frequently suffer from DNA damage issues,
+                   the DNA repair step during library prep usually uses un-methylated Cytosines,
+                   which lead to bias in DNA methylation calls in the heading cycles in read2
+                   as commonly seen in the M-bias plot.
+
+  --aligner        Specify the underline aligner (default: bowtie2)
+                   Currently supports 'bowtie2' and 'hisat2'
 
   --minins MIN     Minimum insert size (default: 0)
   --maxins MAX     Maximum insert size (default: 1000)
@@ -230,6 +230,7 @@ Optional parameters:
 
   --align-only     Stop after alignment (i.e., do not perform DNA methylation call and
                    visualization around TSS; default: not set)
+  --skip-bam       Skip bam file generation (default: not set)
   --keep-dup       Keep duplications in alignment (default: not set)
 
   --CpH            Set this flag to call methylation status of CpH sites (default: not set)
@@ -241,6 +242,7 @@ Optional parameters:
 
 Please refer to README file for more information.
 
+Msuite2 is freely available at $url.
 END_OF_USAGE
 }
 
@@ -380,6 +382,7 @@ sub makefile_perchr_v2 {
 	my $maxins    = shift || 1000;
 	my $THREAD    = shift || 1;
 	my $keepdup   = shift || 0;
+	my $skipBam   = shift || 0;
 	my $outdir    = shift || '..';
 
 	my $job = "";
@@ -402,24 +405,34 @@ sub makefile_perchr_v2 {
 			$mkf .= "\t\@$MsuiteBin/rmdup.w.$seqMode $maxins chr$C.sam chr$C >chr$C.rmdup.log\n";
 			$mkf .= "\t\@$MsuiteBin/rmdup.c.$seqMode $size $maxins rhr$C.sam rhr$C >rhr$C.rmdup.log\n";
 		}
-		$mkf .= "\t\@cat $samheader chr$C.rmdup.sam rhr$C.c2w.sam | samtools view --no-PG -bS - | samtools sort --no-PG -o $chr.srt.bam -\n\n";
+		if( $skipBam ) {
+			$mkf .= "\t\@touch $chr.srt.bam\n\n";
+		} else {
+			$mkf .= "\t\@cat $samheader chr$C.rmdup.sam rhr$C.c2w.sam | " .
+					"samtools view --no-PG -bS - | samtools sort --no-PG -o $chr.srt.bam -\n\n";
+		}
 	}
 	close IN;
 
 	open MK, ">$makefile" or die( "$!" );
-	print MK
-"$outdir/Msuite2.final.bam.bai: $outdir/Msuite2.final.bam
+	if( $skipBam ) {
+		print MK "$outdir/Msuite2.final.bam.bai: $job
+	\@cat *rmdup.log >$outdir/Msuite2.rmdup.log && touch $outdir/Msuite2.final.bam.bai
+
+$mkf";
+	} else {
+		print MK "$outdir/Msuite2.final.bam.bai: $outdir/Msuite2.final.bam
 	$samtools index -\@ $THREAD $outdir/Msuite2.final.bam
 	\@cat *rmdup.log > $outdir/Msuite2.rmdup.log
-	$samtools index -\@ $THREAD Lambda.srt.bam
-	mv Lambda.srt.bam* $outdir/
-	$samtools index -\@ $THREAD pUC19.srt.bam
-	mv pUC19.srt.bam* $outdir/
+	[ -s Lambda.srt.bam ] && $samtools index -\@ $THREAD Lambda.srt.bam && mv Lambda.srt.bam* $outdir/
+	[ -s pUC19.srt.bam  ] && $samtools index -\@ $THREAD pUC19.srt.bam  && mv pUC19.srt.bam*  $outdir/
 
 $outdir/Msuite2.final.bam: $job
 	$samtools merge --no-PG -\@ $THREAD $outdir/Msuite2.final.bam chr*.srt.bam
 
 $mkf";
+	}
+	close MK;
 }
 
 1;

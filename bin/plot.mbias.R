@@ -5,9 +5,14 @@
 #
 
 args = commandArgs( T );
-if( length(args) != 4 ) {
-	print( "usage: <in.w.mbias> <in.c.mbias> <mode=BS|TAPS> <out.prefix>" );
+if( length(args) < 4 ) {
+	print( "usage: <in.w.mbias> <in.c.mbias> <mode=BS|TAPS> <out.prefix> [maxSize=inf]" );
 	q();
+}
+
+maxSize = 1e9;
+if( length(args) > 4 ) {
+	maxSize = as.numeric( args[5] );
 }
 
 wbias = read.table( args[1], head=T, comment="%" );
@@ -15,6 +20,9 @@ cbias = read.table( args[2], head=T, comment="%" );
 #Cycle   C       T
 #1       2303    2341
 #2       2321    2389
+
+wbias= subset(wbias, Cycle <= maxSize)
+cbias= subset(cbias, Cycle <= maxSize)
 
 ## calculate DNAm
 if( args[3] == "BS" || args[3] == "bs" ) {

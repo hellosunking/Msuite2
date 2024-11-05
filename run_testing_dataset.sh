@@ -53,7 +53,7 @@ echo
 ########### 4-letter mode ##########
 ## build makefile
 echo -e "${BLUE}Generating makefile for 4-letter alignment ...."
-CMD="$PRG/msuite2 -x hg38 -1 $PRG/testing_dataset/simu.read1.fq.gz -2 $PRG/testing_dataset/simu.read2.fq.gz -4 -m TAPS -q 0 -p $thread -o $PRG/testing_dataset/Msuite2.Mode4"
+CMD="$PRG/msuite2 -x hg38 -1 $PRG/testing_dataset/simu.read1.fq.gz -2 $PRG/testing_dataset/simu.read2.fq.gz -4 -m TAPS -q 0 -p $thread -o $PRG/testing_dataset/Msuite2.Mode4 --aligner hisat2"
 echo -e "Command line: $CMD${BG}"
 $CMD
 if [ $? != 0 ]
@@ -79,7 +79,7 @@ echo
 ########### 3-letter mode ##########
 echo -e "${BLUE}Generating makefile for 3-letter alignment ...."
 ## build makefile
-CMD="$PRG/msuite2 -x hg38 -1 $PRG/testing_dataset/simu.read1.fq.gz -2 $PRG/testing_dataset/simu.read2.fq.gz -3 -m TAPS -q 0 -p $thread -o $PRG/testing_dataset/Msuite2.Mode3"
+CMD="$PRG/msuite2 -x hg38 -1 $PRG/testing_dataset/simu.read1.fq.gz -2 $PRG/testing_dataset/simu.read2.fq.gz -3 -m TAPS -q 0 -p $thread -o $PRG/testing_dataset/Msuite2.Mode3 --aligner hisat2"
 echo -e "Command line: $CMD${BG}"
 $CMD
 if [ $? != 0 ]

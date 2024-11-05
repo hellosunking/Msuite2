@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #
 # Author : Kun Sun (sunkun@szbl.ac.cn)
-# Date   : Jul 2023
+# Date   : Aug 2022
 # Version: 2.2.0
 #
 # This is the main program of Msuite2.
@@ -17,11 +17,16 @@ use Cwd;
 use File::Basename;
 use FindBin;
 use lib "$FindBin::RealBin/bin";
-use MsuiteUtil qw/$version $ver usage check_index check_dependency detect_cycle makefile_perchr mk_samheader makefile_methcall printRed printGrn printYlw makefile_perchr_v2/;
+use MsuiteUtil qw/$version $ver usage check_index check_dependency detect_cycle mk_samheader makefile_methcall printRed printGrn printYlw makefile_perchr_v2/;
 
+## v2.2.2
+## add "--skip-bam" option to skip bam file generation
+## v2.2.1
+## fix a bug in size plot after cut-head
+## optimization on spike-in report
+## optimize m-bias plot
 ## v2.2
 ## support "keep-dup" option
-## support pUC19 spike-in
 ## add a utility to convert BAM result to BED format
 ## only check cut-paramters in PE-mode
 ##
@@ -46,8 +51,8 @@ our ($mode3, $mode4, $protocol, $kit,       $thread, $phred33, $phred64, $minsco
     (0,      0,      'BS',      'illumina', 0,       0,        0,        20,      , 36      );
 our ($cuthead_r1, $cuttail_r1, $cuthead_r2, $cuttail_r2) =
     (0,           0,           0,           0          );
-our ($minins, $maxins, $call_CpH, $alignonly, $keepdup) =
-    (0,       1000,    0,         0,          0        );
+our ($minins, $maxins, $call_CpH, $alignonly, $keepdup, $skipBam) =
+    (0,       1000,    0,         0,          0       ,        0);
 our $aligner = "bowtie2";
 our $alignmode;	## 3-/4- letter
 our $pe       = '';	## flag to indicate PE data
@@ -86,6 +91,7 @@ GetOptions(
 	"aligner:s"  => \$aligner,
 	"align-only"=> \$alignonly,
 	"keep-dup" => \$keepdup,
+	"skip-bam" => \$skipBam,
 
 	"help|h"    => \$help,
 	"version|v" => \$showVer
@@ -142,6 +148,8 @@ my $thread_lim = $thread;
 $thread_lim = 8 if $thread_lim > 8;	## limit the preprocessing programs to at most 8 threads due to I/O consideration
 
 prepare_directories();
+my $cut_size  = $cuthead_r1 + $cuthead_r2;
+my $max_cycle = $cycle - $cut_size;
 
 ################################### alignment ######################################
 ## deal with input files
@@ -160,15 +168,15 @@ if( $pe ) {	## paired-end data
 	if( $aligner eq 'bowtie2' ) {
 		$makefile .= "Msuite2.raw.log: Msuite2.trim.log #-@ $thread\n" .
 				"\t$bowtie2 $Bowtie2Parameter $PEdataParameter -x $Msuite2Index/m$alignmode " .
-				"-1 Msuite2.R1.fq -2 Msuite2.R2.fq -S Msuite2.raw.sam 2>Msuite2.raw.log\n";
+				"-1 Msuite2.R1.fq -2 Msuite2.R2.fq -S Msuite2.raw.sam 2>Msuite2.raw.log && rm -f Msuite2.R*.fq\n";
 	} else {
 		$makefile .= "Msuite2.raw.log: Msuite2.trim.log #-@ $thread\n" .
 				"\t$hisat2 $Hisat2Parameter $PEdataParameter -x $Msuite2Index/m$alignmode " .
-				"-1 Msuite2.R1.fq -2 Msuite2.R2.fq -S Msuite2.raw.sam 2>Msuite2.raw.log\n";
+				"-1 Msuite2.R1.fq -2 Msuite2.R2.fq -S Msuite2.raw.sam 2>Msuite2.raw.log && rm -f Msuite2.R*.fq\n";
 	}
 
 	$makefile .= "Msuite2.split.OK: Msuite2.raw.log #-@ $thread\n" .
-			"\t$bin/T2C.pe.m$alignmode $chrinfo Msuite2.raw.sam per.chr $thread && touch Msuite2.split.OK\n\n";
+			"\t$bin/T2C.pe.m$alignmode $chrinfo Msuite2.raw.sam per.chr $thread && touch Msuite2.split.OK && rm -f Msuite2.raw.sam\n\n";
 } else {	# single-end data
 	$reads = $read1;
 	$seqMode = 'se';
@@ -182,20 +190,20 @@ if( $pe ) {	## paired-end data
 	if( $aligner eq 'bowtie2' ) {
 		$makefile .= "Msuite2.raw.log: Msuite2.trim.log #-@ $thread\n" .
 				"\t$bowtie2 $Bowtie2Parameter -x $Msuite2Index/m$alignmode " .
-				"-U Msuite2.R1.fq -S Msuite2.raw.sam 2>Msuite2.raw.log\n";
+				"-U Msuite2.R1.fq -S Msuite2.raw.sam 2>Msuite2.raw.log && rm -f Msuite2.R*.fq\n";
 	} else {
 		$makefile .= "Msuite2.raw.log: Msuite2.trim.log #-@ $thread\n" .
 				"\t$hisat2 $Hisat2Parameter -x $Msuite2Index/m$alignmode " .
-				"-U Msuite2.R1.fq -S Msuite2.raw.sam 2>Msuite2.raw.log\n";
+				"-U Msuite2.R1.fq -S Msuite2.raw.sam 2>Msuite2.raw.log && rm -f Msuite2.R*.fq\n";
 	}
 
 	$makefile .= "Msuite2.split.OK: Msuite2.raw.log #-@ $thread\n" .
-			"\t$bin/T2C.se.m$alignmode $chrinfo Msuite2.raw.sam per.chr $thread && touch Msuite2.split.OK\n\n";
+			"\t$bin/T2C.se.m$alignmode $chrinfo Msuite2.raw.sam per.chr $thread && touch Msuite2.split.OK && rm -f Msuite2.raw.sam\n\n";
 }
 
 # step 2: remove duplicate && crick->watson && sam->bam conversion
 mk_samheader( $chrinfo, $index, $protocol, $alignmode, $reads, "$outdir/per.chr/sam.header", $aligner);
-makefile_perchr_v2( $bin, $samtools, $chrinfo, "sam.header", $seqMode, "$outdir/per.chr/makefile.align", $maxins, $thread, $keepdup );
+makefile_perchr_v2( $bin, $samtools, $chrinfo, "sam.header", $seqMode, "$outdir/per.chr/makefile.align", $maxins, $thread, $keepdup, $skipBam );
 $makefile .= "Msuite2.final.bam.bai: Msuite2.split.OK #-@ $thread\n\t\@cd per.chr; make -j $thread -f makefile.align; cd ../\n\n";
 push @tasks, "Msuite2.final.bam.bai";
 
@@ -216,7 +224,7 @@ unless( $alignonly ) {
 				 "R1.c.mbias: Msuite2.CpG.meth.call\n" .
 				 "\tperl $bin/merge.mbias.pl per.chr/rhr*.R1.mbias > R1.c.mbias\n" .
 				 "R1.mbias.pdf: R1.w.mbias R1.c.mbias\n" .
-				 "\t$R --slave --args R1.w.mbias R1.c.mbias $protocol R1.mbias < $bin/plot.mbias.R\n";
+				 "\t$R --slave --args R1.w.mbias R1.c.mbias $protocol R1.mbias $max_cycle < $bin/plot.mbias.R\n";
 	push @tasks, "R1.mbias.pdf";
 
 	if( $pe ) {
@@ -225,7 +233,7 @@ unless( $alignonly ) {
 					 "R2.c.mbias: Msuite2.CpG.meth.call\n" .
 					 "\tperl $bin/merge.mbias.pl per.chr/rhr*.R2.mbias > R2.c.mbias\n" .
 					 "R2.mbias.pdf: R2.w.mbias R2.c.mbias\n" .
-					 "\t$R --slave --args R2.w.mbias R2.c.mbias $protocol R2.mbias < $bin/plot.mbias.R\n";
+					 "\t$R --slave --args R2.w.mbias R2.c.mbias $protocol R2.mbias $max_cycle < $bin/plot.mbias.R\n";
 		push @tasks, "R2.mbias.pdf";
 	}
 
@@ -263,17 +271,16 @@ if( $pe ) {
 				 "\t$R --slave --args R2.trimmed.fqstat < $bin/plot.fqstat.R\n";
 	push @tasks, "R2.fqstat.pdf R2.trimmed.fqstat.pdf";
 
-	my $cut_size = $cuthead_r1 + $cuthead_r2;
 	$makefile .= "Msuite2.w.size: Msuite2.final.bam.bai\n" .
 				 "\t$bin/merge.size.pl w per.chr/chr*.size\n" .
 				 "Msuite2.c.size: Msuite2.final.bam.bai\n" .
 				 "\t$bin/merge.size.pl c per.chr/rhr*.size\n" .
 				 "Msuite2.size.pdf: Msuite2.w.size Msuite2.c.size\n" .
-				 "\tR --slave --args Msuite2.size Msuite2.w.size Msuite2.c.size $cut_size < $bin/plot.size.R\n" .
+				 "\t$R --slave --args Msuite2.size Msuite2.w.size Msuite2.c.size $cut_size < $bin/plot.size.R\n" .
 				 "Msuite2.lambda.size.pdf: Msuite2.w.size Msuite2.c.size\n" .
-				 "\tR --slave --args Msuite2.lambda.size Msuite2.w.lambda.size Msuite2.c.lambda.size $cut_size < $bin/plot.size.R\n" .
+				 "\t$R --slave --args Msuite2.lambda.size Msuite2.w.lambda.size Msuite2.c.lambda.size $cut_size < $bin/plot.size.R\n" .
 				 "Msuite2.pUC19.size.pdf: Msuite2.w.size Msuite2.c.size\n" .
-				 "\tR --slave --args Msuite2.pUC19.size Msuite2.w.pUC19.size Msuite2.c.pUC19.size $cut_size < $bin/plot.size.R\n";
+				 "\t$R --slave --args Msuite2.pUC19.size Msuite2.w.pUC19.size Msuite2.c.pUC19.size $cut_size < $bin/plot.size.R\n";
 
 	push @tasks, "Msuite2.size.pdf Msuite2.lambda.size.pdf Msuite2.pUC19.size.pdf";
 }

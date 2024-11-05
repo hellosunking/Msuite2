@@ -25,11 +25,11 @@ const unsigned int MAX_ERROR_PROPORTION = 10;
 
 int main( int argc, char *argv[] ) {
 	if( argc < 4 ) {
-		cerr << "\nUsage: " << argv[0] << " <chr.info> <Msuite.meth.call> <query.bed>\n"
+		cerr << "\nUsage: " << argv[0] << " <chr.info> <Msuite2.CpG.meth.call> <query.bed>\n"
 			 << "\nThis program is designed to calculate the CpG coverage in the given regions.\n"
 			 << "\n3 columns will be added to the input BED file: CpG.covered C.count T.count"
 			 << "\nBy default, the result will be written to STDOUT, you may redirect it to a file.\n"
-			 << "\nIn addition, CpG sites with too many non-CT calls will be discarded (it could contain SNPs).\n\n";
+			 << "\nIn addition, CpG sites with too many non-CT calls (>10%) will be discarded (it could contain SNPs).\n\n";
 		return 1;
 	}
 

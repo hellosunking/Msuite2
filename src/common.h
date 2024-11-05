@@ -97,7 +97,7 @@ const int MIN_ALIGN_SCORE_KEEP = 5;
 
 // quality parameters for methylation calling
 const int MIN_ALIGN_SCORE_METH = 20;	// minimum alignment score to call methylation
-const int MIN_BASEQUAL_SCORE = 53;		// minimum phred score for a cycle to be used in meth-calling
+const int MIN_BASEQUAL_SCORE   = 53;	// minimum phred score for a cycle to be used in meth-calling
 
 #endif
 

@@ -1,5 +1,5 @@
 # Msuite2: Multi-mode DNA methylation data analysis suite
-Version 2.2.0, Jul 2023<br />
+Version 2.2.2, Aug 2024<br />
 Authors: Lishi Li, Xiaojian Liu, Yunyun An, Pengxiang Yuan, Li Ma, Xin Jin, Yu Zhao, Songfa Zhang, Xin Hong, Kun Sun<br />
 Software implemented by Kun Sun \(sunkun@szbl.ac.cn\)<br />
 <br />
@@ -21,14 +21,13 @@ The major improvements/changes of Msuite2 are:
 * Runs ~ 1.5x faster than Msuite1 in alignment (when both using Bowtie2), ~ 8x faster in methylation call
 * Supports flexiable manipulation of read cycles after adapter-trimming to minimize
   [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
-* Supports both lambda and pUC19 (from v2.2) spike-in sequences
 * Optimized statistics report
 
 ## Installation
 `Msuite2` is written in `Perl` and `R` for Linux/Unix platform. To run `Msuite2` you need a Linux/Unix
 machine with `Bash 4 (or higher)`, `Perl 5.10 (or higher)` and `R 3.0 (or higher)` installed.
 
-This source package contains pre-compiled executable files using `G++ v4.8.5` for Linux x86_64 system.
+This source package contains pre-compiled executable files using `g++ v4.8.5` for Linux x86_64 system.
 If you could not run the analysis normally (which is usually caused by low version of `libc++` library),
 or you want to build a different version optimized for your system, you can re-compile the programs:
 ```
@@ -66,9 +65,6 @@ and `REFSEQ.txt.bz2` for `Bzip2` compressed file). The `Genome.ID` is an identif
 to name your genome and the indices will be written to the `index` directory under the root of `Msuite2`.
 You can add as many genomes to `Msuite2` as you need.
 
-**Important Note:** Msuite2 v2.2 is NOT compatible with indices built in earlier versions due to support
-for pUC19 spike-in. Please re-build the indices if you upgrade to Msuite2 v2.2 from earlier versions.
-
 ## Run Msuite2
 The main program is `msuite2`. You can add its path to your `.bashrc` file under the `PATH` variable
 to call it from anywhere, or you can run the following command to add it to your current session:
@@ -81,7 +77,7 @@ Call `msuite2` without any parameters to see the usage (or use '-h' option):
 ########## Msuite2: Multi-mode DNA methylation data analysis suite ##########
 
 Author : Kun Sun (sunkun@szbl.ac.cn)
-Version: v2.2.0 (Jul 2023)
+Version: v2.2.2 (Aug 2024)
 
 Usage: msuite [options] -x index -1/-U Read1.fq [ -2 Read2.fq ] -o out.dir
 
@@ -156,6 +152,7 @@ Optional parameters:
 
   --align-only     Stop after alignment (i.e., do not perform DNA methylation call and
                    visualization around TSS; default: not set)
+  --skip-bam       Skip bam file generation (default: not set)
   --keep-dup       Keep duplications in alignment (default: not set)
 
   --CpH            Set this flag to call methylation status of CpH sites (default: not set)
@@ -250,12 +247,14 @@ The alignment results are recorded in the file `Msuite2.final.bam` (in standard 
 
 You can run `make clean` in the OUTDIR to delete the intermediate files to save storage space.
 
+
 ## Utilities
 ### Mviewer
 `Msuite2` contains a visualization tool named `Mviewer`, adapted from the authors' previous
 [BSviewer](http://sunlab.cpy.cuhk.edu.hk/BSviewer/) software. It is specially optimized to be compatiable
 with `Msuite2` alignment results and provides nucleotide-level, genotype-preserved DNA methylation data
 visualization. For more information, please refer to README file in `Mviewer` directory.
+
 
 ### Others
 `Msuite2` also provides other utilities under the `util` directory.<br />
@@ -269,20 +268,11 @@ given regions (e.g., CpG islands, promoters).<br />
 The `pe_bam2bed.pl` and `se_bam2bed.pl` are designed to translate the aligned BAM file into BED format file, and
 `bed2wig` is designed to translate BED file into WIG files (e.g., for coverage profiles).<br />
 
-## Citation
-When referencing, please cite
 
-"Sun K, Li L, Ma L, Zhao Y, Deng L, Wang H, Sun H:
-**Msuite: a high-performance and versatile DNA methylation data analysis toolkit.**
-*Patterns (N Y)* 2020 Nov 13; 1(8):100127."
-[Full Text](https://doi.org/10.1016/j.patter.2020.100127 "Full text")
-
-or
-
-"Li L, An Y, Ma L, Yang M, Yuan P, Liu X, Jin X, Zhao Y, Zhang S, Hong X, Sun K:
-**Msuite2: all-in-one DNA methylation data analysis toolkit with enhanced usability and performance.**
-*Comput Struct Biotechnol J.* 2022 Mar 10; 20:1271-1276."
-[Full Text](https://doi.org/10.1016/j.csbj.2022.03.005 "Full text")
+### Citation
+If you use Msuite2 in your work, please cite the following papers:<br />
+- Sun K, Li L, Ma L, Zhao Y, Deng L, Wang H, Sun H. *Msuite: a high-performance and versatile DNA methylation data analysis toolkit.* Patterns (N Y) 2020 Nov 13; 1(8):100127.
+- Li L, An Y, Ma L, Yang M, Yuan P, Liu X, Jin X, Zhao Y, Zhang S*, Hong X*, Sun K*. *Msuite2: all-in-one DNA methylation data analysis toolkit with enhanced usability and performance.* Comput Struct Biotechnol J 2022 Mar 10; 20:1271-1276.
 
 ---
 Please send bug reports to Kun Sun \(sunkun@szbl.ac.cn\).<br />
