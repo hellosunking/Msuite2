@@ -4,11 +4,14 @@
 #include <sstream>
 #include <algorithm>
 #include <vector>
+#include <ctime>
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
 #include <omp.h>
 #include <zlib.h>
+#include <chrono>
+#include <thread>
 #include "common.h"
 #include "util.h"
 
@@ -16,12 +19,16 @@ using namespace std;
 
 // hisat2 supports atmost 256 character long of read id, and does not has --sam-no-qname-trunc option
 const unsigned int MAX_CONVERTED_READ_ID = 200;	// leave 56 char for read name
+const static chrono::microseconds waiting_time_for_writing(100);
+string unk;
+char *gz_buffer_1 = NULL;
+char *gz_buffer_2 = NULL;
 
 // changes in v2.1: use 2 threads for file loading; change Phred64 to Phred33 when necessary
 /**
  * Author: Kun Sun (sunkun@szbl.ac.cn)
  * This program is part of the Msuite2 package, adapted from Ktrim
- * Date: Jul 2021
+ * Date: Nov 2024
  *
  * The conversion log's rule: NOTE that LINE_NUMBER is NO longer recorded in Msuite2
  *   read 1:
@@ -35,8 +42,7 @@ const unsigned int MAX_CONVERTED_READ_ID = 200;	// leave 56 char for read name
 **/
 
 /*
- * use dynamic max_mismatch as the covered size can range from 3 to a large number such as 50,
- * so use 4 is not good
+ * use dynamic max_mismatch as the covered size can range from 3 to a large number such as 50
 */
 bool check_mismatch_dynamic_PE( const string & s1, string & s2, unsigned int pos, const adapter_info* ai ) {
 	register unsigned int mis1=0, mis2=0;
@@ -133,7 +139,7 @@ int main( int argc, const char *argv[] ) {
 
 			 << "Default parameters:\n"
 			 << "  mode: 0 (could be 0,3,4)\n"
-			 << "  thread: 1\n"
+			 << "  thread: 8 (requires >=4)\n"
 			 << "  min.length: 36\n"
 			 << "  min.quality: 53 (33+20 for phred33('!', or '#') scoring system)\n"
 			 << "    Phred33 to Phred64 conversion is automatically ON if min.quality >= 74\n"
@@ -147,7 +153,7 @@ int main( int argc, const char *argv[] ) {
 	}
 
 	int mode = 0;
-	int thread = 1;
+	int thread = 8;
 	int min_length = 36;
 	char quality = 53;
 	const char *libraryKit = "illumina";
@@ -194,6 +200,11 @@ int main( int argc, const char *argv[] ) {
 		cerr << "Warning: thread is set to 0! I will use all threads instead.\n";
 		thread = omp_get_max_threads();
 	}
+	if( thread < 4 ) {
+		cerr << "Error: at least 4 threads are required!\n";
+		return 103;
+	}
+	unsigned int real_wk_thread = thread - 2;	// reserve 2 threads for file loading
 	if( min_length == 0 ) {
 		cerr << "Error: invalid min_length! Must be a positive number!\n";
 		return 101;
@@ -218,17 +229,29 @@ int main( int argc, const char *argv[] ) {
 		changePhred = true;
 	}
 
-	string *id1   = new string [READS_PER_BATCH];
-	string *id2   = new string [READS_PER_BATCH];
-	string *seq1  = new string [READS_PER_BATCH];
-	string *seq2  = new string [READS_PER_BATCH];
-	string *qual1 = new string [READS_PER_BATCH];
-	string *qual2 = new string [READS_PER_BATCH];
-	string unk;
+// read buffer a
+	string *rba_id1   = new string [READS_PER_BATCH];
+	string *rba_id2   = new string [READS_PER_BATCH];
+	string *rba_seq1  = new string [READS_PER_BATCH];
+	string *rba_seq2  = new string [READS_PER_BATCH];
+	string *rba_qual1 = new string [READS_PER_BATCH];
+	string *rba_qual2 = new string [READS_PER_BATCH];
+// read buffer b
+	string *rbb_id1   = new string [READS_PER_BATCH];
+	string *rbb_id2   = new string [READS_PER_BATCH];
+	string *rbb_seq1  = new string [READS_PER_BATCH];
+	string *rbb_seq2  = new string [READS_PER_BATCH];
+	string *rbb_qual1 = new string [READS_PER_BATCH];
+	string *rbb_qual2 = new string [READS_PER_BATCH];
+	
+	// working buffer
+	string *id1, *id2, *seq1, *seq2, *qual1, *qual2;
+	// loading buffer
+	string *ld_id1, *ld_id2, *ld_seq1, *ld_seq2, *ld_qual1, *ld_qual2;
 
-	int *dropped	  = new int [thread];
-	int *real_adapter = new int [thread];
-	int *tail_adapter = new int [thread];
+	int *dropped	  = new int [real_wk_thread];
+	int *real_adapter = new int [real_wk_thread];
+	int *tail_adapter = new int [real_wk_thread];
 
 	fastqstat * AllR1stat = new fastqstat[ cycle ];
 	memset( AllR1stat, 0, cycle*sizeof(fastqstat) );
@@ -241,17 +264,17 @@ int main( int argc, const char *argv[] ) {
 	memset( AllR2stat_trimmed, 0, cycle*sizeof(fastqstat) );
 
 	// buffer for storing the modified reads per thread
-	char ** buffer1 = new char * [thread];
-	char ** buffer2 = new char * [thread];
-	int  * b1stored = new int    [thread];
-	int  * b2stored = new int    [thread];
-	fastqstat **R1stat = new fastqstat * [thread];
-	fastqstat **R2stat = new fastqstat * [thread];
+	char ** buffer1 = new char * [real_wk_thread];
+	char ** buffer2 = new char * [real_wk_thread];
+	int  * b1stored = new int    [real_wk_thread];
+	int  * b2stored = new int    [real_wk_thread];
+	fastqstat **R1stat = new fastqstat * [real_wk_thread];
+	fastqstat **R2stat = new fastqstat * [real_wk_thread];
 	// new in v2: report the fqstat after trimming
-	fastqstat **R1stat_trimmed = new fastqstat * [thread];
-	fastqstat **R2stat_trimmed = new fastqstat * [thread];
+	fastqstat **R1stat_trimmed = new fastqstat * [real_wk_thread];
+	fastqstat **R2stat_trimmed = new fastqstat * [real_wk_thread];
 
-	for(unsigned int i=0; i!=thread; ++i) {
+	for(unsigned int i=0; i!=real_wk_thread; ++i) {
 		buffer1[i] = new char[ BUFFER_SIZE_PER_BATCH_READ ];
 		buffer2[i] = new char[ BUFFER_SIZE_PER_BATCH_READ ];
 
@@ -299,18 +322,19 @@ int main( int argc, const char *argv[] ) {
 	cout << "INFO: " << totalFiles << " paired fastq files will be loaded.\n";
 
 	string base = argv[4];
-	ofstream fout1( (base+".R1.fq").c_str() ), fout2( (base+".R2.fq").c_str() );
+	ofstream fout1( (base+".R1.fq").c_str() );
+	ofstream fout2( (base+".R2.fq").c_str() );
 	if( fout1.fail() || fout2.fail() ) {
 		cout << "Error: write file failed!\n";
 		fout1.close();
 		fout2.close();
 		return 3;
 	}
-	
+
 	ifstream fq1, fq2;
 	gzFile gfp1, gfp2;
-	char * gz_buffer_1 = new char [ MAX_SEQNAME_SIZE ];
-	char * gz_buffer_2 = new char [ MAX_SEQNAME_SIZE ];
+	gz_buffer_1 = new char [ MAX_SEQNAME_SIZE ];
+	gz_buffer_2 = new char [ MAX_SEQNAME_SIZE ];
 	register int totalReads = 0;
 	for( int fileCnt=0; fileCnt!=totalFiles; ++ fileCnt ) {
 		bool file_is_gz = false;
@@ -337,496 +361,496 @@ int main( int argc, const char *argv[] ) {
 				return 11;
 			}
 		}
-		// load and process reads
-		while( true ) {
-			unsigned int loaded = 0;
-			//TODO: use 2 threads to load data
-			unsigned int loaded_2 = 0;
+		// load the first batch of reads
+		unsigned int loaded = 0;
+		unsigned int loaded_2 = 0;
 
-			if( file_is_gz ) {
-				if( thread == 1 ) {
-					// read 1
-					loaded = load_read_batch_gz( gfp1, gz_buffer_1, id1, seq1, qual1 );
-					// read 2
-					loaded_2 = load_read_batch_gz( gfp2, gz_buffer_2, id2, seq2, qual2 );
+		omp_set_num_threads( 2 );
+		#pragma omp parallel
+		{
+			unsigned int tn = omp_get_thread_num();
+			if( tn == 0 ) {
+				if( file_is_gz ) {
+					loaded = load_read_batch_gz( gfp1, gz_buffer_1, rba_id1, rba_seq1, rba_qual1 );
 				} else {
-					omp_set_num_threads( 2 );
-					#pragma omp parallel
-					{
-						unsigned int tn = omp_get_thread_num();
-						if( tn == 0 ) {
-							loaded = load_read_batch_gz( gfp1, gz_buffer_1, id1, seq1, qual1 );
-						} else {
-							loaded_2 = load_read_batch_gz( gfp2, gz_buffer_2, id2, seq2, qual2 );
-						}
-					}
+					loaded = load_read_batch( fq1, rba_id1, rba_seq1, rba_qual1 );
 				}
 			} else {
-				if( thread == 1 ) {
-					loaded = load_read_batch( fq1, id1, seq1, qual1 );
-					loaded_2 = load_read_batch( fq2, id2, seq2, qual2 );
+				if( file_is_gz ) {
+					loaded_2 = load_read_batch_gz( gfp2, gz_buffer_2, rba_id2, rba_seq2, rba_qual2 );
 				} else {
-					omp_set_num_threads( 2 );
-					#pragma omp parallel
-					{
-						unsigned int tn = omp_get_thread_num();
-						if( tn == 0 ) {
-							loaded = load_read_batch( fq1, id1, seq1, qual1 );
-						} else {
-							loaded_2 = load_read_batch( fq2, id2, seq2, qual2 );
-						}
-					}
+					loaded_2 = load_read_batch( fq2, rba_id2, rba_seq2, rba_qual2 );
 				}
 			}
+		}
+		if( loaded != loaded_2 ) {
+			cerr << "Error: unequal read number in R1 and R2!\n";
+			exit(1);
+		}
+		id1=rba_id1; id2=rba_id2; seq1=rba_seq1; seq2=rba_seq2; qual1=rba_qual1; qual2=rba_qual2;
+		ld_id1=rbb_id1; ld_id2=rbb_id2; ld_seq1=rbb_seq1; ld_seq2=rbb_seq2; ld_qual1=rbb_qual1; ld_qual2=rbb_qual2;
 
-			if( loaded != loaded_2 ) {	// error happens
-				cerr << "ERROR in loading file!\n";
-				exit(10);
-			}
+		// load and process reads
+		while( loaded ) {
+			unsigned int loaded_batch = 0;
+			//TODO: use 2 threads to load data
+			unsigned int loaded_2_batch = 0;
+			unsigned int write_thread = 0;
 
-			if( loaded == 0 )	// reach the end of file
-				break;
-
-			// start parallalization
 			omp_set_num_threads( thread );
 			#pragma omp parallel
 			{
 				unsigned int tn = omp_get_thread_num();
-				unsigned int start = loaded * tn / thread;
-				unsigned int end   = loaded * (tn+1) / thread;
 
-				// normalization
-				b1stored[tn] = 0;
-				b2stored[tn] = 0;
-				memset( R1stat[tn], 0, cycle*sizeof(fastqstat) );
-				memset( R2stat[tn], 0, cycle*sizeof(fastqstat) );
-				memset( R1stat_trimmed[tn], 0, cycle*sizeof(fastqstat) );
-				memset( R2stat_trimmed[tn], 0, cycle*sizeof(fastqstat) );
-			
-				string conversionLog1, conversionLog2;
-				register int i, j;
-				register int last_seed;
-				vector<int> seed;
-				vector<int> :: iterator it;
-				const char *p, *q;
-				char *conversion = new char [MAX_CONVERSION];
-				char numstr[10]; // enough to hold all numbers up to 99,999,999 plus ':'
+				// reserve the last 2 threads for loading files
+				if( tn == thread - 2 ) {
+					if( file_is_gz ) {
+						loaded_batch = load_read_batch_gz( gfp1, gz_buffer_1, ld_id1, ld_seq1, ld_qual1 );
+					} else {
+						loaded_batch = load_read_batch( fq1, ld_id1, ld_seq1, ld_qual1 );
+					}
+				} else if( tn == thread - 1 ) {
+					if( file_is_gz ) {
+						loaded_2_batch = load_read_batch_gz( gfp2, gz_buffer_2, ld_id2, ld_seq2, ld_qual2 );
+					} else {
+						loaded_2_batch = load_read_batch( fq2, ld_id2, ld_seq2, ld_qual2 );
+					}
+				} else {
+					unsigned int start = loaded * tn / real_wk_thread;
+					unsigned int end   = loaded * (tn+1) / real_wk_thread;
+//					cerr << "Thread " << tn << ": analyze " << start << " - " << end << "\n";
 
-				for( register int ii=start; ii!=end; ++ii ) {
-					// check R1/R2 cycles
-					if( seq2[ii].size() != seq1[ii].size() ) {
-						if( seq2[ii].size() > seq1[ii].size() ) {
-							seq2[ii].resize(  seq1[ii].size()  );
-							qual2[ii].resize( qual1[ii].size() );
-						} else {
-							seq1[ii].resize(  seq2[ii].size()  );
-							qual1[ii].resize( qual2[ii].size() );
+					// normalization
+					b1stored[tn] = 0;
+					b2stored[tn] = 0;
+					memset( R1stat[tn], 0, cycle*sizeof(fastqstat) );
+					memset( R2stat[tn], 0, cycle*sizeof(fastqstat) );
+					memset( R1stat_trimmed[tn], 0, cycle*sizeof(fastqstat) );
+					memset( R2stat_trimmed[tn], 0, cycle*sizeof(fastqstat) );
+
+					string conversionLog1, conversionLog2;
+					register int i, j;
+					register int last_seed;
+					vector<int> seed;
+					vector<int> :: iterator it;
+					const char *p, *q;
+					char *conversion = new char [MAX_CONVERSION];
+					char numstr[10]; // enough to hold all numbers up to 99,999,999 plus ':'
+
+					for( register int ii=start; ii!=end; ++ii ) {
+						// check R1/R2 cycles
+						if( seq2[ii].size() != seq1[ii].size() ) {
+							if( seq2[ii].size() > seq1[ii].size() ) {
+								seq2[ii].resize(  seq1[ii].size()  );
+								qual2[ii].resize( qual1[ii].size() );
+							} else {
+								seq1[ii].resize(  seq2[ii].size()  );
+								qual1[ii].resize( qual2[ii].size() );
+							}
 						}
-					}
 
-					//if the reads are longer than "cycle" paramater, only keep the head "cycle" ones
-					if( seq1[ii].size() > cycle ) {
-						seq1[ii].resize(  cycle );
-						qual1[ii].resize( cycle );
-						seq2[ii].resize(  cycle );
-						qual2[ii].resize( cycle );
-					}
-
-					// raw fqstatistics
-					p = seq1[ii].c_str();
-					q = seq2[ii].c_str();
-
-					j = seq1[ii].size();
-					for( i=0; i!=j; ++i ) {
-						switch ( p[i] ) {
-							case 'a':
-							case 'A': R1stat[tn][i].A ++; break;
-							case 'c':
-							case 'C': R1stat[tn][i].C ++; break;
-							case 'g':
-							case 'G': R1stat[tn][i].G ++; break;
-							case 't':
-							case 'T': R1stat[tn][i].T ++; break;
-							default : R1stat[tn][i].N ++; break;
+						//if the reads are longer than "cycle" paramater, only keep the head "cycle" ones
+						if( seq1[ii].size() > cycle ) {
+							seq1[ii].resize(  cycle );
+							qual1[ii].resize( cycle );
+							seq2[ii].resize(  cycle );
+							qual2[ii].resize( cycle );
 						}
-					}
-					j = seq2[ii].size();
-					for( i=0; i!=j; ++i ) {
-						switch ( q[i] ) {
-							case 'a':
-							case 'A': R2stat[tn][i].A ++; break;
-							case 'c':
-							case 'C': R2stat[tn][i].C ++; break;
-							case 'g':
-							case 'G': R2stat[tn][i].G ++; break;
-							case 't':
-							case 'T': R2stat[tn][i].T ++; break;
-							default : R2stat[tn][i].N ++; break;
-						}
-					}
 
-					// quality control
-					p = qual1[ii].c_str();
-					q = qual2[ii].c_str();
-					i = get_quality_trim_cycle_pe( p, q, qual1[ii].size(), min_length, quality );
-
-					if( i < min_length ) { // not long enough
-						++ dropped[ tn ];
-						continue;
-					}
-					seq1[ii].resize(  i );
-					seq2[ii].resize(  i );
-					qual1[ii].resize( i );
-					qual2[ii].resize( i );
-					if( changePhred ) {
-						for( j=0; j!=i; ++j ) {
-							qual1[ii][j] -= 31;
-							qual2[ii][j] -= 31;
-						}
-					}
-
-					// looking for seed target, 1 mismatch is allowed for these 2 seeds
-					// which means seq1 and seq2 at least should take 1 perfect seed match
-					seed.clear();
-					for( i=0; (i=seq1[ii].find(ai->adapter_index, i)) != string::npos; ++i )
-						seed.push_back( i );
-					for( i=0; (i=seq2[ii].find(ai->adapter_index, i)) != string::npos; ++i )
-						seed.push_back( i );
-
-					sort( seed.begin(), seed.end() );
-
-					last_seed = impossible_seed;	// a position which cannot be in seed
-					for( it=seed.begin(); it!=seed.end(); ++it ) {
-						if( *it != last_seed ) {
-						// as there maybe the same value in seq1_seed and seq2_seed,
-						// use this to avoid re-calculate that pos
-							if( check_mismatch_dynamic_PE( seq1[ii], seq2[ii], *it, ai) )
-								break;
-							last_seed = *it;
-						}
-					}
-
-					if( it != seed.end() ) {	// adapter found
-						++ real_adapter[tn];
-						if( *it >= min_length )	{
-							seq1[ii].resize(  *it );
-							seq2[ii].resize(  *it );
-							qual1[ii].resize( *it );
-							qual2[ii].resize( *it );
-						} else {	// drop this read as its length is not enough
-							++ dropped[tn];
-							continue;
-						}
-					} else {	// seed not found, now check the tail, if perfect match, trim the tail
-						i = seq1[ii].length() - 2;
+						// raw fqstatistics
 						p = seq1[ii].c_str();
 						q = seq2[ii].c_str();
-						if( p[i]==ai->adapter_r1[0] && p[i+1]==ai->adapter_r1[1] &&
-									q[i]==ai->adapter_r2[0] && q[i+1]==ai->adapter_r2[1] ) {
-							// if it is a real adapter, then Read1 and Read2 should be complimentary
-							// in real data, the heading 5 bp are usually of poor quality, therefore we test the 6th, 7th
-							if( is_revcomp(p[5], q[i-6]) && is_revcomp(q[5], p[i-6]) ) {
-								if( i < min_length ) {
-									++ dropped[tn];
-									continue;
-								}
-								seq1[ii].resize( i );
-								seq2[ii].resize( i );
-								qual1[ii].resize( i );
-								qual2[ii].resize( i );
 
-								++ tail_adapter[tn];
+						j = seq1[ii].size();
+						for( i=0; i!=j; ++i ) {
+							switch ( p[i] ) {
+								case 'a':
+								case 'A': R1stat[tn][i].A ++; break;
+								case 'c':
+								case 'C': R1stat[tn][i].C ++; break;
+								case 'g':
+								case 'G': R1stat[tn][i].G ++; break;
+								case 't':
+								case 'T': R1stat[tn][i].T ++; break;
+								default : R1stat[tn][i].N ++; break;
 							}
-						} else {	// tail 2 is not good, check tail 1
-							++ i;
-							if( p[i] == ai->adapter_r1[0] && q[i] == ai->adapter_r2[0] ) {
-								if(is_revcomp(p[5], q[i-6]) && is_revcomp(q[5], p[i-6]) &&
-										is_revcomp(p[6], q[i-7]) && is_revcomp(q[6], p[i-7]) ) {
+						}
+						j = seq2[ii].size();
+						for( i=0; i!=j; ++i ) {
+							switch ( q[i] ) {
+								case 'a':
+								case 'A': R2stat[tn][i].A ++; break;
+								case 'c':
+								case 'C': R2stat[tn][i].C ++; break;
+								case 'g':
+								case 'G': R2stat[tn][i].G ++; break;
+								case 't':
+								case 'T': R2stat[tn][i].T ++; break;
+								default : R2stat[tn][i].N ++; break;
+							}
+						}
+
+						// quality control
+						p = qual1[ii].c_str();
+						q = qual2[ii].c_str();
+						i = get_quality_trim_cycle_pe( p, q, qual1[ii].size(), min_length, quality );
+
+						if( i < min_length ) { // not long enough
+							++ dropped[ tn ];
+							continue;
+						}
+						seq1[ii].resize(  i );
+						seq2[ii].resize(  i );
+						qual1[ii].resize( i );
+						qual2[ii].resize( i );
+						if( changePhred ) {
+							for( j=0; j!=i; ++j ) {
+								qual1[ii][j] -= 31;
+								qual2[ii][j] -= 31;
+							}
+						}
+
+						// looking for seed target, 1 mismatch is allowed for these 2 seeds
+						// which means seq1 and seq2 at least should take 1 perfect seed match
+						seed.clear();
+						for( i=0; (i=seq1[ii].find(ai->adapter_index, i)) != string::npos; ++i )
+							seed.push_back( i );
+						for( i=0; (i=seq2[ii].find(ai->adapter_index, i)) != string::npos; ++i )
+							seed.push_back( i );
+
+						sort( seed.begin(), seed.end() );
+
+						last_seed = impossible_seed;	// a position which cannot be in seed
+						for( it=seed.begin(); it!=seed.end(); ++it ) {
+							if( *it != last_seed ) {
+							// as there maybe the same value in seq1_seed and seq2_seed,
+							// use this to avoid re-calculate that pos
+								if( check_mismatch_dynamic_PE( seq1[ii], seq2[ii], *it, ai) )
+									break;
+								last_seed = *it;
+							}
+						}
+
+						if( it != seed.end() ) {	// adapter found
+							++ real_adapter[tn];
+							if( *it >= min_length )	{
+								seq1[ii].resize(  *it );
+								seq2[ii].resize(  *it );
+								qual1[ii].resize( *it );
+								qual2[ii].resize( *it );
+							} else {	// drop this read as its length is not enough
+								++ dropped[tn];
+								continue;
+							}
+						} else {	// seed not found, now check the tail, if perfect match, trim the tail
+							i = seq1[ii].length() - 2;
+							p = seq1[ii].c_str();
+							q = seq2[ii].c_str();
+							if( p[i]==ai->adapter_r1[0] && p[i+1]==ai->adapter_r1[1] &&
+										q[i]==ai->adapter_r2[0] && q[i+1]==ai->adapter_r2[1] ) {
+								// if it is a real adapter, then Read1 and Read2 should be complimentary
+								// in real data, the heading 5 bp are usually of poor quality, therefore we test the 6th, 7th
+								if( is_revcomp(p[5], q[i-6]) && is_revcomp(q[5], p[i-6]) ) {
 									if( i < min_length ) {
 										++ dropped[tn];
 										continue;
 									}
-									seq1[ii].resize(  i );
-									seq2[ii].resize(  i );
+									seq1[ii].resize( i );
+									seq2[ii].resize( i );
 									qual1[ii].resize( i );
 									qual2[ii].resize( i );
 
 									++ tail_adapter[tn];
 								}
+							} else {	// tail 2 is not good, check tail 1
+								++ i;
+								if( p[i] == ai->adapter_r1[0] && q[i] == ai->adapter_r2[0] ) {
+									if(is_revcomp(p[5], q[i-6]) && is_revcomp(q[5], p[i-6]) &&
+											is_revcomp(p[6], q[i-7]) && is_revcomp(q[6], p[i-7]) ) {
+										if( i < min_length ) {
+											++ dropped[tn];
+											continue;
+										}
+										seq1[ii].resize(  i );
+										seq2[ii].resize(  i );
+										qual1[ii].resize( i );
+										qual2[ii].resize( i );
+
+										++ tail_adapter[tn];
+									}
+								}
 							}
 						}
-					}
 
-					// cut head and tail
-					if( cut_head_r1 ) {
-						seq1[ii].erase(  0, cut_head_r1 );
-						qual1[ii].erase( 0, cut_head_r1 );
-					}
-					if( cut_tail_r1 ) {
-						seq1[ii].resize(  seq1[ii].length()  - cut_tail_r1 );
-						qual1[ii].resize( qual1[ii].length() - cut_tail_r1 );
-					}
-
-					if( seq1[ii].length() < min_length ) {
-						++ dropped[tn];
-						continue;
-					}
-
-					if( cut_head_r2 ) {
-						seq2[ii].erase(  0, cut_head_r2 );
-						qual2[ii].erase( 0, cut_head_r2 );
-					}
-					if( cut_tail_r2 ) {
-						seq2[ii].resize(  seq2[ii].length()  - cut_tail_r2 );
-						qual2[ii].resize( qual2[ii].length() - cut_tail_r2 );
-					}
-
-					//fqstatistics after trimming
-					p = seq1[ii].c_str();
-					q = seq2[ii].c_str();
-					j = seq1[ii].size();
-					for( i=0; i!=j; ++i ) {
-						switch ( p[i] ) {
-							case 'a':
-							case 'A': R1stat_trimmed[tn][i].A ++; break;
-							case 'c':
-							case 'C': R1stat_trimmed[tn][i].C ++; break;
-							case 'g':
-							case 'G': R1stat_trimmed[tn][i].G ++; break;
-							case 't':
-							case 'T': R1stat_trimmed[tn][i].T ++; break;
-							default : R1stat_trimmed[tn][i].N ++; break;
+						// cut head and tail
+						if( cut_head_r1 ) {
+							seq1[ii].erase(  0, cut_head_r1 );
+							qual1[ii].erase( 0, cut_head_r1 );
 						}
-					}
-					j = seq2[ii].size();
-					for( i=0; i!=j; ++i ) {
-						switch ( q[i] ) {
-							case 'a':
-							case 'A': R2stat_trimmed[tn][i].A ++; break;
-							case 'c':
-							case 'C': R2stat_trimmed[tn][i].C ++; break;
-							case 'g':
-							case 'G': R2stat_trimmed[tn][i].G ++; break;
-							case 't':
-							case 'T': R2stat_trimmed[tn][i].T ++; break;
-							default : R2stat_trimmed[tn][i].N ++; break;
+						if( cut_tail_r1 ) {
+							seq1[ii].resize(  seq1[ii].length()  - cut_tail_r1 );
+							qual1[ii].resize( qual1[ii].length() - cut_tail_r1 );
 						}
-					}
 
-					//check if there is any white space in the IDs; if so, remove all the data after the whitespace
-					j = id1[ii].size();
-					p = id1[ii].c_str();
-					for( i=1; i!=j; ++i ) {
-						if( p[i]==' ' || p[i]=='\t' ) {	// white space, then trim ID
-							id1[ii].resize( i );
-							break;
-						}
-					}
-					j = id2[ii].size();
-					q = id2[ii].c_str();
-					for( i=0; i!=j; ++i ) {
-						if( q[i]==' ' || q[i]=='\t' ) {	// white space, then trim ID
-							id2[ii].resize( i );
-							break;
-						}
-					}
-
-					// do C->T and G->A conversion
-					if( mode == 3 ) {	// in the current implementation, id1 and id2 are different!!!
-						// in mode 3, there is NO endC and frontG issues
-						id1[ii][0] = CONVERSION_LOG_END;
-						j = seq1[ii].size();	// seq1 and seq2 are of the same size
-						conversionLog1 = NORMAL_SEQNAME_START;
-						for( i=0; i!=j; ++i ) {
-							if( seq1[ii][i] == 'C' ) {
-								seq1[ii][i] = 'T';
-								sprintf( numstr, "%x%c", i, CONVERSION_LOG_SEPARATOR );
-								conversionLog1 += numstr;
-							}
-						}
-						if( conversionLog1.back() == CONVERSION_LOG_SEPARATOR )
-							conversionLog1.pop_back();
-
-						if( conversionLog1.length() > MAX_CONVERTED_READ_ID ) {
-							//cerr << "LONG read ID!\n";
-							++ dropped[tn];
-							continue;
-						}
-						/*fout1 << NORMAL_SEQNAME_START << line << conversionLog << id1 << '\n'
-								<< seq1 << "\n+\n" << qual1 << '\n';*/
-
-						id2[ii][0] = CONVERSION_LOG_END;
-						conversionLog2 = NORMAL_SEQNAME_START;	// read2 does not record line number
-						for( i=0; i!=j; ++i ) {
-							if( seq2[ii][i] == 'G' ) {
-								seq2[ii][i] = 'A';
-								sprintf( numstr, "%x%c", i, CONVERSION_LOG_SEPARATOR );
-								conversionLog2 += numstr;
-							}
-						}
-						if( conversionLog2.back() == CONVERSION_LOG_SEPARATOR )
-							conversionLog2.pop_back();
-
-						if( conversionLog2.length() > MAX_CONVERTED_READ_ID ) {
-							//cerr << "LONG read ID!\n";
+						if( seq1[ii].length() < min_length ) {
 							++ dropped[tn];
 							continue;
 						}
 
-						b1stored[tn] += sprintf( buffer1[tn]+b1stored[tn], "%s%s\n%s\n+\n%s\n",
-												conversionLog1.c_str(), id1[ii].c_str(), seq1[ii].c_str(), qual1[ii].c_str() );
-						b2stored[tn] += sprintf( buffer2[tn]+b2stored[tn], "%s%s\n%s\n+\n%s\n",
-												conversionLog2.c_str(), id2[ii].c_str(), seq2[ii].c_str(), qual2[ii].c_str() );
-					} else if ( mode == 4 ) {	// this is the major task for EMaligner
-						// modify id1 to add line number (to facilitate the removing ambigous step)
-						// check seq1 for C>T conversion
-						id1[ii][0] = CONVERSION_LOG_END;
-						conversionLog1 = NORMAL_SEQNAME_START;
-						j = seq1[ii].size()-1;
-						if( seq1[ii].back() == 'C' ) { //ther is a 'C' and the end, discard it (but record its Quality score);
-							//otherwise it may introduce a mismatch in alignment
-							if( qual1[ii].back() == '@' ) {
-								conversionLog1 += REPLACEMENT_CHAR_AT;
-							} else {
-								conversionLog1 += qual1[ii].back();
-							}
-							conversionLog1 += KEEP_QUAL_MARKER;
-							seq1[ii].pop_back();
-							qual1[ii].pop_back();
+						if( cut_head_r2 ) {
+							seq2[ii].erase(  0, cut_head_r2 );
+							qual2[ii].erase( 0, cut_head_r2 );
 						}
+						if( cut_tail_r2 ) {
+							seq2[ii].resize(  seq2[ii].length()  - cut_tail_r2 );
+							qual2[ii].resize( qual2[ii].length() - cut_tail_r2 );
+						}
+
+						//fqstatistics after trimming
+						p = seq1[ii].c_str();
+						q = seq2[ii].c_str();
+						j = seq1[ii].size();
 						for( i=0; i!=j; ++i ) {
-							if( seq1[ii][i]=='C' && seq1[ii][i+1]=='G' ) {
-								seq1[ii][i] = 'T';
-								sprintf( numstr, "%x%c", i, CONVERSION_LOG_SEPARATOR );
-								conversionLog1 += numstr;
+							switch ( p[i] ) {
+								case 'a':
+								case 'A': R1stat_trimmed[tn][i].A ++; break;
+								case 'c':
+								case 'C': R1stat_trimmed[tn][i].C ++; break;
+								case 'g':
+								case 'G': R1stat_trimmed[tn][i].G ++; break;
+								case 't':
+								case 'T': R1stat_trimmed[tn][i].T ++; break;
+								default : R1stat_trimmed[tn][i].N ++; break;
 							}
-						}
-						if( conversionLog1.back() == CONVERSION_LOG_SEPARATOR )
-							conversionLog1.pop_back();
-
-						if( conversionLog1.length() > MAX_CONVERTED_READ_ID ) {
-							//cerr << "LONG read ID!\n";
-							++ dropped[tn];
-							continue;
-						}
-
-						// format for ID1:
-						// if there is a C at the end
-						//	@ x | C1;C2;C3# raw_seq_name
-						//	the | is the marker for the existence of tail 'C' and 'x' is its quality score
-						//	if exists, | is ALWAYS two bytes after '+' (use this to test its existence)
-						// if there is No C at the end
-						//	@C1;C2;C3# raw_seq_name
-						//
-						// All the numbers in line_number and C1,C2,C3... are HEX
-
-						// check seq2 for G>A conversion
-						id2[ii][0] = CONVERSION_LOG_END;
-						conversionLog2 = NORMAL_SEQNAME_START;
-						if( seq2[ii][0] == 'G' ) { //'G' at the front, discard it (but record its Quality score)
-							if( qual2[ii][0] == '@' ) {
-								conversionLog2 += REPLACEMENT_CHAR_AT;
-							} else {
-								conversionLog2 += qual2[ii][0];
-							}
-							conversionLog2 += KEEP_QUAL_MARKER;
 						}
 						j = seq2[ii].size();
-						for( i=1; i!=j; ++i ) {
-							if( seq2[ii][i]=='G' && seq2[ii][i-1]=='C' ) {
-								seq2[ii][i] = 'A';
-								sprintf( numstr, "%x%c", i, CONVERSION_LOG_SEPARATOR );
-								conversionLog2 += numstr;
+						for( i=0; i!=j; ++i ) {
+							switch ( q[i] ) {
+								case 'a':
+								case 'A': R2stat_trimmed[tn][i].A ++; break;
+								case 'c':
+								case 'C': R2stat_trimmed[tn][i].C ++; break;
+								case 'g':
+								case 'G': R2stat_trimmed[tn][i].G ++; break;
+								case 't':
+								case 'T': R2stat_trimmed[tn][i].T ++; break;
+								default : R2stat_trimmed[tn][i].N ++; break;
 							}
 						}
-						if( conversionLog2.back() == CONVERSION_LOG_SEPARATOR )
-							conversionLog2.pop_back();
 
-						if( conversionLog2.length() > MAX_CONVERTED_READ_ID ) {
-							//cerr << "LONG read ID!\n";
-							++ dropped[tn];
-							continue;
+						//check if there is any white space in the IDs; if so, remove all the data after the whitespace
+						j = id1[ii].size();
+						p = id1[ii].c_str();
+						for( i=1; i!=j; ++i ) {
+							if( p[i]==' ' || p[i]=='\t' ) {	// white space, then trim ID
+								id1[ii].resize( i );
+								break;
+							}
+						}
+						j = id2[ii].size();
+						q = id2[ii].c_str();
+						for( i=0; i!=j; ++i ) {
+							if( q[i]==' ' || q[i]=='\t' ) {	// white space, then trim ID
+								id2[ii].resize( i );
+								break;
+							}
 						}
 
-						b1stored[tn] += sprintf( buffer1[tn]+b1stored[tn], "%s%s\n%s\n+\n%s\n",
-									conversionLog1.c_str(), id1[ii].c_str(), seq1[ii].c_str(), qual1[ii].c_str() );
+						// do C->T and G->A conversion
+						if( mode == 3 ) {	// in the current implementation, id1 and id2 are different!!!
+							// in mode 3, there is NO endC and frontG issues
+							id1[ii][0] = CONVERSION_LOG_END;
+							j = seq1[ii].size();	// seq1 and seq2 are of the same size
+							conversionLog1 = NORMAL_SEQNAME_START;
+							for( i=0; i!=j; ++i ) {
+								if( seq1[ii][i] == 'C' ) {
+									seq1[ii][i] = 'T';
+									sprintf( numstr, "%x%c", i, CONVERSION_LOG_SEPARATOR );
+									conversionLog1 += numstr;
+								}
+							}
+							if( conversionLog1.back() == CONVERSION_LOG_SEPARATOR )
+								conversionLog1.pop_back();
 
-						if( seq2[ii][0] != 'G' ) {
+							if( conversionLog1.length() > MAX_CONVERTED_READ_ID ) {
+								//cerr << "LONG read ID!\n";
+								++ dropped[tn];
+								continue;
+							}
+							/*fout1 << NORMAL_SEQNAME_START << line << conversionLog << id1 << '\n'
+									<< seq1 << "\n+\n" << qual1 << '\n';*/
+
+							id2[ii][0] = CONVERSION_LOG_END;
+							conversionLog2 = NORMAL_SEQNAME_START;	// read2 does not record line number
+							for( i=0; i!=j; ++i ) {
+								if( seq2[ii][i] == 'G' ) {
+									seq2[ii][i] = 'A';
+									sprintf( numstr, "%x%c", i, CONVERSION_LOG_SEPARATOR );
+									conversionLog2 += numstr;
+								}
+							}
+							if( conversionLog2.back() == CONVERSION_LOG_SEPARATOR )
+								conversionLog2.pop_back();
+
+							if( conversionLog2.length() > MAX_CONVERTED_READ_ID ) {
+								//cerr << "LONG read ID!\n";
+								++ dropped[tn];
+								continue;
+							}
+
+							b1stored[tn] += sprintf( buffer1[tn]+b1stored[tn], "%s%s\n%s\n+\n%s\n",
+													conversionLog1.c_str(), id1[ii].c_str(), seq1[ii].c_str(), qual1[ii].c_str() );
 							b2stored[tn] += sprintf( buffer2[tn]+b2stored[tn], "%s%s\n%s\n+\n%s\n",
 													conversionLog2.c_str(), id2[ii].c_str(), seq2[ii].c_str(), qual2[ii].c_str() );
+						} else if ( mode == 4 ) {	// this is the major task for EMaligner
+							// modify id1 to add line number (to facilitate the removing ambigous step)
+							// check seq1 for C>T conversion
+							id1[ii][0] = CONVERSION_LOG_END;
+							conversionLog1 = NORMAL_SEQNAME_START;
+							j = seq1[ii].size()-1;
+							if( seq1[ii].back() == 'C' ) { //ther is a 'C' and the end, discard it (but record its Quality score);
+								//otherwise it may introduce a mismatch in alignment
+								if( qual1[ii].back() == '@' ) {
+									conversionLog1 += REPLACEMENT_CHAR_AT;
+								} else {
+									conversionLog1 += qual1[ii].back();
+								}
+								conversionLog1 += KEEP_QUAL_MARKER;
+								seq1[ii].pop_back();
+								qual1[ii].pop_back();
+							}
+							for( i=0; i!=j; ++i ) {
+								if( seq1[ii][i]=='C' && seq1[ii][i+1]=='G' ) {
+									seq1[ii][i] = 'T';
+									sprintf( numstr, "%x%c", i, CONVERSION_LOG_SEPARATOR );
+									conversionLog1 += numstr;
+								}
+							}
+							if( conversionLog1.back() == CONVERSION_LOG_SEPARATOR )
+								conversionLog1.pop_back();
+
+							if( conversionLog1.length() > MAX_CONVERTED_READ_ID ) {
+								//cerr << "LONG read ID!\n";
+								++ dropped[tn];
+								continue;
+							}
+
+							// format for ID1:
+							// if there is a C at the end
+							//	@ x | C1;C2;C3# raw_seq_name
+							//	the | is the marker for the existence of tail 'C' and 'x' is its quality score
+							//	if exists, | is ALWAYS two bytes after '+' (use this to test its existence)
+							// if there is No C at the end
+							//	@C1;C2;C3# raw_seq_name
+							//
+							// All the numbers in line_number and C1,C2,C3... are HEX
+
+							// check seq2 for G>A conversion
+							id2[ii][0] = CONVERSION_LOG_END;
+							conversionLog2 = NORMAL_SEQNAME_START;
+							if( seq2[ii][0] == 'G' ) { //'G' at the front, discard it (but record its Quality score)
+								if( qual2[ii][0] == '@' ) {
+									conversionLog2 += REPLACEMENT_CHAR_AT;
+								} else {
+									conversionLog2 += qual2[ii][0];
+								}
+								conversionLog2 += KEEP_QUAL_MARKER;
+							}
+							j = seq2[ii].size();
+							for( i=1; i!=j; ++i ) {
+								if( seq2[ii][i]=='G' && seq2[ii][i-1]=='C' ) {
+									seq2[ii][i] = 'A';
+									sprintf( numstr, "%x%c", i, CONVERSION_LOG_SEPARATOR );
+									conversionLog2 += numstr;
+								}
+							}
+							if( conversionLog2.back() == CONVERSION_LOG_SEPARATOR )
+								conversionLog2.pop_back();
+
+							if( conversionLog2.length() > MAX_CONVERTED_READ_ID ) {
+								//cerr << "LONG read ID!\n";
+								++ dropped[tn];
+								continue;
+							}
+
+							b1stored[tn] += sprintf( buffer1[tn]+b1stored[tn], "%s%s\n%s\n+\n%s\n",
+										conversionLog1.c_str(), id1[ii].c_str(), seq1[ii].c_str(), qual1[ii].c_str() );
+
+							if( seq2[ii][0] != 'G' ) {
+								b2stored[tn] += sprintf( buffer2[tn]+b2stored[tn], "%s%s\n%s\n+\n%s\n",
+														conversionLog2.c_str(), id2[ii].c_str(), seq2[ii].c_str(), qual2[ii].c_str() );
+							} else {
+								p = seq2[ii].c_str();
+								q = qual2[ii].c_str();
+								b2stored[tn] += sprintf( buffer2[tn]+b2stored[tn], "%s%s\n%s\n+\n%s\n",
+														conversionLog2.c_str(), id2[ii].c_str(), p+1, q+1 );
+							}
+						} else {	// mode 0: no need to do conversion
+							b1stored[tn] += sprintf( buffer1[tn]+b1stored[tn], "%s\n%s\n+\n%s\n",
+										id1[ii].c_str(), seq1[ii].c_str(), qual1[ii].c_str() );
+							b2stored[tn] += sprintf( buffer2[tn]+b2stored[tn], "%s\n%s\n+\n%s\n",
+										id2[ii].c_str(), seq2[ii].c_str(), qual2[ii].c_str() );
+						}
+					}
+
+					//wait for my turn to output
+					while( true ) {
+						if( tn == write_thread ) {
+							// output to stdout for pipe with aligners?
+							fout1 << buffer1[tn];
+							fout2 << buffer2[tn];
+
+							for( register int j=0; j!=cycle; ++j ) {
+								AllR1stat[j].A += R1stat[tn][j].A;
+								AllR1stat[j].C += R1stat[tn][j].C;
+								AllR1stat[j].G += R1stat[tn][j].G;
+								AllR1stat[j].T += R1stat[tn][j].T;
+								AllR1stat[j].N += R1stat[tn][j].N;
+
+								AllR2stat[j].A += R2stat[tn][j].A;
+								AllR2stat[j].C += R2stat[tn][j].C;
+								AllR2stat[j].G += R2stat[tn][j].G;
+								AllR2stat[j].T += R2stat[tn][j].T;
+								AllR2stat[j].N += R2stat[tn][j].N;
+
+								AllR1stat_trimmed[j].A += R1stat_trimmed[tn][j].A;
+								AllR1stat_trimmed[j].C += R1stat_trimmed[tn][j].C;
+								AllR1stat_trimmed[j].G += R1stat_trimmed[tn][j].G;
+								AllR1stat_trimmed[j].T += R1stat_trimmed[tn][j].T;
+								AllR1stat_trimmed[j].N += R1stat_trimmed[tn][j].N;
+
+								AllR2stat_trimmed[j].A += R2stat_trimmed[tn][j].A;
+								AllR2stat_trimmed[j].C += R2stat_trimmed[tn][j].C;
+								AllR2stat_trimmed[j].G += R2stat_trimmed[tn][j].G;
+								AllR2stat_trimmed[j].T += R2stat_trimmed[tn][j].T;
+								AllR2stat_trimmed[j].N += R2stat_trimmed[tn][j].N;
+							}
+							++ write_thread;
+							break;
 						} else {
-							p = seq2[ii].c_str();
-							q = qual2[ii].c_str();
-							b2stored[tn] += sprintf( buffer2[tn]+b2stored[tn], "%s%s\n%s\n+\n%s\n",
-													conversionLog2.c_str(), id2[ii].c_str(), p+1, q+1 );
-						}
-					} else {	// mode 0: no need to do conversion
-						b1stored[tn] += sprintf( buffer1[tn]+b1stored[tn], "%s\n%s\n+\n%s\n",
-									id1[ii].c_str(), seq1[ii].c_str(), qual1[ii].c_str() );
-						b2stored[tn] += sprintf( buffer2[tn]+b2stored[tn], "%s\n%s\n+\n%s\n",
-									id2[ii].c_str(), seq2[ii].c_str(), qual2[ii].c_str() );
-					}
-				}
-			}	// parallel body
-
-			// write output and update fastq statistics
-			if( thread > 1 ) {	// multi-thread
-				omp_set_num_threads( 2 );
-				#pragma omp parallel
-				{
-					unsigned int tn = omp_get_thread_num();
-
-					if( tn == 0 ) {
-						for(register int i=0; i!=thread; ++i ) {
-							fout1 << buffer1[i];
-						}
-					} else {
-						for(register int i=0; i!=thread; ++i ) {
-							fout2 << buffer2[i];
+							this_thread::sleep_for( waiting_time_for_writing );
 						}
 					}
-				}
-			} else {	// single-thread
-				fout1 << buffer1[0];
-				fout2 << buffer2[0];
-			}
-
-			for(register int i=0; i!=thread; ++i ) {
-				for( register int j=0; j!=cycle; ++j ) {
-					AllR1stat[j].A += R1stat[i][j].A;
-					AllR1stat[j].C += R1stat[i][j].C;
-					AllR1stat[j].G += R1stat[i][j].G;
-					AllR1stat[j].T += R1stat[i][j].T;
-					AllR1stat[j].N += R1stat[i][j].N;
-
-					AllR2stat[j].A += R2stat[i][j].A;
-					AllR2stat[j].C += R2stat[i][j].C;
-					AllR2stat[j].G += R2stat[i][j].G;
-					AllR2stat[j].T += R2stat[i][j].T;
-					AllR2stat[j].N += R2stat[i][j].N;
-
-					AllR1stat_trimmed[j].A += R1stat_trimmed[i][j].A;
-					AllR1stat_trimmed[j].C += R1stat_trimmed[i][j].C;
-					AllR1stat_trimmed[j].G += R1stat_trimmed[i][j].G;
-					AllR1stat_trimmed[j].T += R1stat_trimmed[i][j].T;
-					AllR1stat_trimmed[j].N += R1stat_trimmed[i][j].N;
-
-					AllR2stat_trimmed[j].A += R2stat_trimmed[i][j].A;
-					AllR2stat_trimmed[j].C += R2stat_trimmed[i][j].C;
-					AllR2stat_trimmed[j].G += R2stat_trimmed[i][j].G;
-					AllR2stat_trimmed[j].T += R2stat_trimmed[i][j].T;
-					AllR2stat_trimmed[j].N += R2stat_trimmed[i][j].N;
-				}
+				}	// parallel body per batch
 			}
 			totalReads += loaded;
 			cerr << '\r' << totalReads << " reads loaded";
 
-			if( file_is_gz ) {
-				if( gzeof( gfp1 ) ) break;
-			} else {
-				if( fq1.eof() ) break;
+			if( loaded_batch != loaded_2_batch ) {	// error happens
+				cerr << "ERROR in loading file (" << loaded_batch << " vs " << loaded_2_batch << ")!\n";
+				exit(10);
 			}
-		}	//load and process file loop
+			loaded = loaded_batch;
+				
+			// swap work and load buffers
+			string *tmp;
+			tmp=id1;   id1=ld_id1;     ld_id1=tmp;
+			tmp=seq1;  seq1=ld_seq1;   ld_seq1=tmp;
+			tmp=qual1; qual1=ld_qual1; ld_qual1=tmp;
+			tmp=id2;   id2=ld_id2;     ld_id2=tmp;
+			tmp=seq2;  seq2=ld_seq2;   ld_seq2=tmp;
+			tmp=qual2; qual2=ld_qual2; ld_qual2=tmp;
+		}//process file
 
 		if( file_is_gz ) {
 			gzclose( gfp1 );
@@ -835,7 +859,7 @@ int main( int argc, const char *argv[] ) {
 			fq1.close();
 			fq2.close();
 		}
-	}
+	}// process file list
 
 	fout1.close();
 	fout2.close();
@@ -848,7 +872,7 @@ int main( int argc, const char *argv[] ) {
 		return 4;
 	}
 	int dropped_all=0, real_all=0, tail_all=0;
-	for( unsigned int i=0; i!=thread; ++i ) {
+	for( unsigned int i=0; i!=real_wk_thread; ++i ) {
 		dropped_all += dropped[i];
 		real_all += real_adapter[i];
 		tail_all += tail_adapter[i];
@@ -911,7 +935,7 @@ int main( int argc, const char *argv[] ) {
 	//free memory
 	delete [] gz_buffer_1;
 	delete [] gz_buffer_2;
-	for(unsigned int i=0; i!=thread; ++i) {
+	for(unsigned int i=0; i!=real_wk_thread; ++i) {
 		delete buffer1[i];
 		delete buffer2[i];
 		delete R1stat[i];
@@ -925,7 +949,20 @@ int main( int argc, const char *argv[] ) {
 	delete [] AllR2stat;
 	delete [] AllR1stat_trimmed;
 	delete [] AllR2stat_trimmed;
+	
+	delete [] rba_id1;
+	delete [] rba_id2;
+	delete [] rba_seq1;
+	delete [] rba_seq2;
+	delete [] rba_qual1;
+	delete [] rba_qual2;
+
+	delete [] rbb_id1;
+	delete [] rbb_id2;
+	delete [] rbb_seq1;
+	delete [] rbb_seq2;
+	delete [] rbb_qual1;
+	delete [] rbb_qual2;
 
 	return 0;
 }
-

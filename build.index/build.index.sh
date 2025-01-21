@@ -86,13 +86,13 @@ perl $PRG/process.genome.pl $1 $lambdaGenome,$pUC19Genome $indexDIR/$id/
 ##ln -s watson.fa $indexDIR/$id/genome.fa
 
 echo "Building 4-letter indices for bowtie2 ..."
-$bb --threads $thread $indexDIR/$id/CG2TG.fa $indexDIR/$id/indices/bowtie2/m4 >/dev/null
+#$bb --threads $thread $indexDIR/$id/CG2TG.fa $indexDIR/$id/indices/bowtie2/m4 >/dev/null
 echo "Building 3-letter indices for bowtie2 ..."
-$bb --threads $thread $indexDIR/$id/C2T.fa   $indexDIR/$id/indices/bowtie2/m3 >/dev/null
+#$bb --threads $thread $indexDIR/$id/C2T.fa   $indexDIR/$id/indices/bowtie2/m3 >/dev/null
 touch $indexDIR/$id/indices/bowtie2.ready
 
 echo "Building 4-letter indices for hisat2 ..."
-$hb -p $thread $indexDIR/$id/CG2TG.fa $indexDIR/$id/indices/hisat2/m4 >/dev/null
+#$hb -p $thread $indexDIR/$id/CG2TG.fa $indexDIR/$id/indices/hisat2/m4 >/dev/null
 echo "Building 3-letter indices for hisat2 ..."
 $hb -p $thread $indexDIR/$id/C2T.fa   $indexDIR/$id/indices/hisat2/m3 >/dev/null
 touch $indexDIR/$id/indices/hisat2.ready

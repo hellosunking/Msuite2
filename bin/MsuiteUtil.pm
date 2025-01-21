@@ -11,9 +11,9 @@ use Exporter 'import';
 our @EXPORT = qw/$version $ver $url usage makefile_perchr makefile_methcall mk_samheader detect_cycle check_dependency check_index printRed printGrn printYlw makefile_perchr_v2/;
 
 # long version
-our $version = 'v2.2.2 (Aug 2024)';
+our $version = 'v2.3.0 (Nov 2024)';
 # short version
-our $ver = 'v2.2.2';
+our $ver = 'v2.3.0';
 our $url = 'https://github.com/hellosunking/Msuite2/';
 
 ## v2.2.1

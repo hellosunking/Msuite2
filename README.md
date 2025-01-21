@@ -1,6 +1,5 @@
 # Msuite2: Multi-mode DNA methylation data analysis suite
-Version 2.2.2, Aug 2024<br />
-Authors: Lishi Li, Xiaojian Liu, Yunyun An, Pengxiang Yuan, Li Ma, Xin Jin, Yu Zhao, Songfa Zhang, Xin Hong, Kun Sun<br />
+Version 2.3.0, Nov 2024<br />
 Software implemented by Kun Sun \(sunkun@szbl.ac.cn\)<br />
 <br />
 Distributed under the
@@ -14,7 +13,7 @@ Msuite2 is the successor of [Msuite1](https://github.com/hellosunking/Msuite/ "M
 key features of Msuite1, e.g., integration of quality control, read alignment, methylation call, and data
 visualization, as well as supports both 3- and 4-letter alignment modes.<br />
 
-The major improvements/changes of Msuite2 are:
+The major improvements/changes of Msuite2 (compared to Msuite1) are:
 
 * Only aligns the reads to reference genome once
 * Supports usage of Hisat2 as the underline aligner
@@ -23,15 +22,33 @@ The major improvements/changes of Msuite2 are:
   [single-strand DNA overhang](https://doi.org/10.1093/nar/gkaa128 "Harkins et al. NAR 2020") issue
 * Optimized statistics report
 
+## Changes in v2.3
+* Optimize file preprocessing step for speed-up
+* Pipe alignment and sam file split
+
+In addition, since v2.2, Msuite2 adds support for pUC19 spike-in, which makes it incompatible with indices
+built with v2.1/v2.0. Please re-build the indices if you update to v2.2 or later versions.
+
 ## Installation
 `Msuite2` is written in `Perl` and `R` for Linux/Unix platform. To run `Msuite2` you need a Linux/Unix
 machine with `Bash 4 (or higher)`, `Perl 5.10 (or higher)` and `R 3.0 (or higher)` installed.
 
 This source package contains pre-compiled executable files using `g++ v4.8.5` for Linux x86_64 system.
 If you could not run the analysis normally (which is usually caused by low version of `libc++` library),
-or you want to build a different version optimized for your system, you can re-compile the programs:
+or you want to build a different version optimized for your system, you can re-compile the programs
+(make sure that the version of your `g++` compiler is higher than 4.8, you can use `g++ -v` to check it):
 ```
 user@linux$ make clean && make
+```
+
+For macOS users: please make sure that you are using `g++` instead of `clang`. You may install `g++ v14`
+through `brew`:
+```
+brew install gcc@14
+```
+then you can recompile the programs using the `makefile.macos` file (thanks to Mahmoud A. Bassal):
+```
+make -f makefile.macos clean && make -f makefile.macos
 ```
 
 Note that `Msuite2` depends on the following software:
@@ -40,8 +57,7 @@ Note that `Msuite2` depends on the following software:
 * [hisat2](https://daehwankimlab.github.io/hisat2 "hisat2")
 * [samtools](http://samtools.sourceforge.net/ "samtools")
 
-Please install them properly and make sure that they are included in your `PATH`. In addition, please make
-sure that the version of your `g++` compiler is higher than 4.8 (you can use `g++ -v` to check it).
+Please install them properly and make sure that they are included in your `PATH`.
 
 Before running `Msuite2`, genome indices must be built. To this end, we have prepared a utility named
 `build.index.sh` under the `build.index` directory. To use it, you need to prepare the genome sequence
@@ -77,7 +93,7 @@ Call `msuite2` without any parameters to see the usage (or use '-h' option):
 ########## Msuite2: Multi-mode DNA methylation data analysis suite ##########
 
 Author : Kun Sun (sunkun@szbl.ac.cn)
-Version: v2.2.2 (Aug 2024)
+Version: v2.3.0 (Nov 2024)
 
 Usage: msuite [options] -x index -1/-U Read1.fq [ -2 Read2.fq ] -o out.dir
 
@@ -141,10 +157,10 @@ Optional parameters:
                    Note that the total cut basepairs in read 1 and 2 must be the same
                    (i.e., cut-r1-head + cut-r1-tail must equal to cut-r2-head + cut-r2-tail)
 
-                   In BS-seq, read2 starts from the 3'-end which frequently suffer from
-                   DNA damage issues, and the DNA repair step in library prepraration usually
-                   uses un-methylated Cytosines which lead to bias in DNA methylation calling
-                   as commonly seen in the M-bias plot.
+                   In BS-seq, read2 starts from the 3'-end frequently suffer from DNA damage
+                   issues, and the DNA repair step in library prepraration usually uses
+                   un-methylated Cytosines which lead to bias in DNA methylation calling as
+                   commonly seen in the M-bias plot.
 
   --minins MIN     Minimum insert size (default: 0)
   --maxins MAX     Maximum insert size (default: 1000)

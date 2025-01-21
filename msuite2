@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 #
 # Author : Kun Sun (sunkun@szbl.ac.cn)
-# Date   : Aug 2022
-# Version: 2.2.0
+# Date   : Nov 2024
+# Version: 2.3.0
 #
 # This is the main program of Msuite2.
 # It will interpret the parameters, prepare data and write makefile.
@@ -19,6 +19,9 @@ use FindBin;
 use lib "$FindBin::RealBin/bin";
 use MsuiteUtil qw/$version $ver usage check_index check_dependency detect_cycle mk_samheader makefile_methcall printRed printGrn printYlw makefile_perchr_v2/;
 
+## v2.3.0
+## optimize file preprocessing for speed-up
+## pipe alignement and sam file split; note that I did not pipe preprocessing and alignment here
 ## v2.2.2
 ## add "--skip-bam" option to skip bam file generation
 ## v2.2.1
@@ -145,7 +148,7 @@ my $RawGenome        = "$Msuite2/index/$index/fasta";
 my $chrinfo          = "$Msuite2/index/$index/chr.info";
 
 my $thread_lim = $thread;
-$thread_lim = 8 if $thread_lim > 8;	## limit the preprocessing programs to at most 8 threads due to I/O consideration
+$thread_lim = 16 if $thread_lim > 16;	## limit the preprocessing programs to at most 16 threads due to I/O consideration
 
 prepare_directories();
 my $cut_size  = $cuthead_r1 + $cuthead_r2;
@@ -168,15 +171,14 @@ if( $pe ) {	## paired-end data
 	if( $aligner eq 'bowtie2' ) {
 		$makefile .= "Msuite2.raw.log: Msuite2.trim.log #-@ $thread\n" .
 				"\t$bowtie2 $Bowtie2Parameter $PEdataParameter -x $Msuite2Index/m$alignmode " .
-				"-1 Msuite2.R1.fq -2 Msuite2.R2.fq -S Msuite2.raw.sam 2>Msuite2.raw.log && rm -f Msuite2.R*.fq\n";
+				"-1 Msuite2.R1.fq -2 Msuite2.R2.fq 2>Msuite2.raw.log | ";
 	} else {
 		$makefile .= "Msuite2.raw.log: Msuite2.trim.log #-@ $thread\n" .
 				"\t$hisat2 $Hisat2Parameter $PEdataParameter -x $Msuite2Index/m$alignmode " .
-				"-1 Msuite2.R1.fq -2 Msuite2.R2.fq -S Msuite2.raw.sam 2>Msuite2.raw.log && rm -f Msuite2.R*.fq\n";
+				"-1 Msuite2.R1.fq -2 Msuite2.R2.fq 2>Msuite2.raw.log | ";
 	}
 
-	$makefile .= "Msuite2.split.OK: Msuite2.raw.log #-@ $thread\n" .
-			"\t$bin/T2C.pe.m$alignmode $chrinfo Msuite2.raw.sam per.chr $thread && touch Msuite2.split.OK && rm -f Msuite2.raw.sam\n\n";
+	$makefile .= "$bin/T2C.pe.m$alignmode $chrinfo /dev/stdin per.chr $thread && rm -f Msuite2.R*.fq\n\n";
 } else {	# single-end data
 	$reads = $read1;
 	$seqMode = 'se';
@@ -190,21 +192,20 @@ if( $pe ) {	## paired-end data
 	if( $aligner eq 'bowtie2' ) {
 		$makefile .= "Msuite2.raw.log: Msuite2.trim.log #-@ $thread\n" .
 				"\t$bowtie2 $Bowtie2Parameter -x $Msuite2Index/m$alignmode " .
-				"-U Msuite2.R1.fq -S Msuite2.raw.sam 2>Msuite2.raw.log && rm -f Msuite2.R*.fq\n";
+				"-U Msuite2.R1.fq 2>Msuite2.raw.log | ";
 	} else {
 		$makefile .= "Msuite2.raw.log: Msuite2.trim.log #-@ $thread\n" .
 				"\t$hisat2 $Hisat2Parameter -x $Msuite2Index/m$alignmode " .
-				"-U Msuite2.R1.fq -S Msuite2.raw.sam 2>Msuite2.raw.log && rm -f Msuite2.R*.fq\n";
+				"-U Msuite2.R1.fq 2>Msuite2.raw.log | ";
 	}
 
-	$makefile .= "Msuite2.split.OK: Msuite2.raw.log #-@ $thread\n" .
-			"\t$bin/T2C.se.m$alignmode $chrinfo Msuite2.raw.sam per.chr $thread && touch Msuite2.split.OK && rm -f Msuite2.raw.sam\n\n";
+	$makefile .= "$bin/T2C.se.m$alignmode $chrinfo /dev/stdin per.chr $thread && rm -f Msuite2.R*.fq\n\n";
 }
 
 # step 2: remove duplicate && crick->watson && sam->bam conversion
 mk_samheader( $chrinfo, $index, $protocol, $alignmode, $reads, "$outdir/per.chr/sam.header", $aligner);
 makefile_perchr_v2( $bin, $samtools, $chrinfo, "sam.header", $seqMode, "$outdir/per.chr/makefile.align", $maxins, $thread, $keepdup, $skipBam );
-$makefile .= "Msuite2.final.bam.bai: Msuite2.split.OK #-@ $thread\n\t\@cd per.chr; make -j $thread -f makefile.align; cd ../\n\n";
+$makefile .= "Msuite2.final.bam.bai: Msuite2.raw.log #-@ $thread\n\t\@cd per.chr; make -j $thread -f makefile.align; cd ../\n\n";
 push @tasks, "Msuite2.final.bam.bai";
 
 ################################### methylation call ###############################
@@ -289,7 +290,7 @@ $makefile .= "\n";
 ## step 6: generate final report
 my $report = join(" ", "Msuite2.report/index.html:", @tasks) . "\n" .
 			"\t[ -s R1.fqstat.png ] && mv *png Msuite2.report || echo \"Generating report\"\n" .
-			"\tperl $bin/make.report.pl\n";
+			"\tperl $bin/make.report.pl\n\n";
 
 # write makefile
 open  MK, ">$outdir/makefile" or die("$!");
